@@ -708,30 +708,13 @@ const firebaseConfig = {
   apiKey: "AIzaSyCcv6TYBlwM3wdASndMtqncQvJhzztFZ9k",
   authDomain: "uno-i-t.firebaseapp.com",
   databaseURL: "https://uno-i-t-default-rtdb.firebaseio.com",
-  projectId: "uno-i-t",
-
-// ============================================================
-// FIREBASE CONFIG VALIDATION
-// ============================================================
-const isConfigValid = !Object.values(firebaseConfig).some(v => String(v).startsWith('PUT_'));
-
-// ============================================================
-// INIT
-// ============================================================
-let auth, db;
-if (isConfigValid) {
-  try {
-    firebase.initializeApp(firebaseConfig);
-    auth = firebase.auth();
-    db   = firebase.database();
-  } catch(e) {
-    console.error('Firebase init error:', e);
-  }
-}
+  projectId: "uno-i-t"
+};
 
 // ============================================================
 // GLOBALS
 // ============================================================
+let auth, db;
 let currentUser     = null;
 let currentRoomId   = 'official';
 let currentRoomName = '🌐 الغرفة الرسمية';
@@ -742,82 +725,92 @@ let micTimer        = null;
 let xpTimer         = null;
 let mySeatNum       = null;
 let mutedUsers      = {};
-let loaderDone      = false;
 
 // ============================================================
-// BOOT
+// BOOT — waits for DOM + scripts, then runs immediately
 // ============================================================
-window.addEventListener('load', () => {
+document.addEventListener('DOMContentLoaded', function boot() {
+  const loader = document.getElementById('app-loader');
 
-  // If config not set → show setup screen after 1s
-  if (!isConfigValid) {
-    setTimeout(() => {
-      hideLoader();
-      showConfigWarning();
-    }, 1200);
+  function hideLoader() {
+    if (!loader) return;
+    loader.style.transition = 'opacity .35s';
+    loader.style.opacity = '0';
+    setTimeout(() => { if (loader.parentNode) loader.remove(); }, 380);
+  }
+
+  // Check for saved guest session
+  const gRaw = localStorage.getItem('guest_session');
+  if (gRaw) {
+    try { currentUser = JSON.parse(gRaw); } catch(e) { localStorage.removeItem('guest_session'); }
+  }
+
+  // Check if config is real
+  const configFilled = !Object.values(firebaseConfig).some(v => String(v).startsWith('PUT_'));
+
+  if (!configFilled) {
+    // No Firebase config → go straight to auth with a warning
+    hideLoader();
+    showAuthScreen();
+    setTimeout(injectConfigWarning, 100);
     return;
   }
 
-  // Check local session for guest
-  const g = localStorage.getItem('guest_session');
-  if (g) {
-    try { currentUser = JSON.parse(g); } catch(e) {}
-  }
-
-  // Safety timeout: if Firebase doesn't respond in 6s, go to auth anyway
-  const safetyTimer = setTimeout(() => {
-    if (!loaderDone) {
-      hideLoader();
-      if (currentUser && currentUser.isGuest) showApp();
-      else showAuthScreen();
-    }
-  }, 6000);
-
-  // Update loader message after 3s to indicate slow connection
-  setTimeout(() => {
-    const s = document.getElementById('loader-status');
-    if (s && !loaderDone) s.textContent = 'الاتصال بطيء — يمكنك الدخول كزائر إذا فشل الاتصال';
-  }, 3000);
-
-  auth.onAuthStateChanged(user => {
-    clearTimeout(safetyTimer);
-    hideLoader();
-    if (user) {
-      loadUserFromDB(user.uid, user.email);
-    } else if (currentUser && currentUser.isGuest) {
-      showApp();
-    } else {
-      showAuthScreen();
-    }
-  }, error => {
-    clearTimeout(safetyTimer);
+  // Try to init Firebase
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.database();
+  } catch(e) {
+    console.error('Firebase init failed:', e);
     hideLoader();
     showAuthScreen();
-  });
+    return;
+  }
+
+  // Firebase is ready — set a hard 5s timeout then listen
+  let resolved = false;
+  const hardTimeout = setTimeout(() => {
+    if (resolved) return;
+    resolved = true;
+    hideLoader();
+    if (currentUser && currentUser.isGuest) showApp();
+    else showAuthScreen();
+  }, 5000);
+
+  auth.onAuthStateChanged(
+    (user) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(hardTimeout);
+      hideLoader();
+      if (user) {
+        loadUserFromDB(user.uid, user.email);
+      } else if (currentUser && currentUser.isGuest) {
+        showApp();
+      } else {
+        showAuthScreen();
+      }
+    },
+    (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(hardTimeout);
+      hideLoader();
+      showAuthScreen();
+    }
+  );
 });
 
-function hideLoader() {
-  if (loaderDone) return;
-  loaderDone = true;
-  const l = document.getElementById('app-loader');
-  if (!l) return;
-  l.style.opacity = '0';
-  setTimeout(() => { if (l.parentNode) l.remove(); }, 400);
-}
-
-function showConfigWarning() {
-  document.getElementById('auth-screen').classList.remove('hidden');
-  // Show a config notice inside auth card
+function injectConfigWarning() {
   const card = document.querySelector('.auth-card');
+  if (!card) return;
+  // avoid duplicates
+  if (card.querySelector('.cfg-warn')) return;
   const notice = document.createElement('div');
-  notice.style.cssText = 'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:14px;margin-bottom:18px;font-size:13px;color:#f59e0b;line-height:1.7;direction:rtl;text-align:right';
-  notice.innerHTML = `
-    <strong>⚠️ Firebase غير مُهيَّأ</strong><br>
-    افتح ملف <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px">index.html</code>
-    وضع بيانات مشروعك في:<br>
-    <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px;font-size:11px">const firebaseConfig = { ... }</code><br><br>
-    في الوقت الحالي يمكنك الدخول كـ <strong>زائر</strong> بدون Firebase.
-  `;
+  notice.className = 'cfg-warn';
+  notice.style.cssText = 'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:14px;margin-bottom:18px;font-size:13px;color:#f59e0b;line-height:1.8;direction:rtl;text-align:right';
+  notice.innerHTML = `<strong>⚠️ Firebase غير مُهيَّأ</strong><br>ضع بيانات Firebase في <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px">firebaseConfig</code> داخل الملف.<br>يمكنك الآن الدخول كـ <strong>زائر</strong> لتجربة الواجهة.`;
   card.insertBefore(notice, card.firstChild);
 }
 
