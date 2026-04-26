@@ -2,31 +2,21 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>IT CHAT PRO</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>IT Chat & Voice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- ══════════════════════════════════════
+     🔥 FIREBASE CONFIG — ضع بياناتك هنا
+     ══════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, addDoc, onSnapshot, orderBy, query, serverTimestamp, doc, setDoc, getDoc, updateDoc }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-
-<style>
-body{margin:0;background:#070812;color:#fff;font-family:Arial}
-button{cursor:pointer}
-input{outline:none}
-*{box-sizing:border-box}
-</style>
-</head>
-
-<body>
-<div id="root"></div>
-
-<script type="text/babel">
-
-// ───────────────── FIREBASE ─────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyCcv6TYBlwM3wdASndMtqncQvJhzztFZ9k",
   authDomain: "uno-i-t.firebaseapp.com",
@@ -38,209 +28,1586 @@ const firebaseConfig = {
   measurementId: "G-NFVJZ0L8DF"
 };
 
-firebase.initializeApp(firebaseConfig);
-const auth=firebase.auth();
-const db=firebase.database();
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
 
-// ───────────────── OWNER ─────────────────
-const OWNER_EMAIL="admin@it.com";
-const OWNER_PASS="123456";
+  window.FB_AUTH = auth;
+  window.FB_DB   = db;
+  window.FB      = { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+                     collection, addDoc, onSnapshot, orderBy, query, serverTimestamp, doc, setDoc, getDoc, updateDoc };
+</script>
 
-// ───────────────── APP ─────────────────
-const {useState,useEffect} = React;
+<style>
+/* ═══════════════════════════════════════
+   RESET & GLOBAL
+═══════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'IBM Plex Sans Arabic', sans-serif;
+  background: #080810;
+  color: #f1f5f9;
+  direction: rtl;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 4px; }
+input, textarea, button, select { font-family: inherit; }
+button { cursor: pointer; }
 
-function App(){
+/* ═══════════════════════════════════════
+   KEYFRAMES
+═══════════════════════════════════════ */
+@keyframes fadeUp    { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
+@keyframes fadeIn    { from { opacity:0 } to { opacity:1 } }
+@keyframes shimmer   { 0%{background-position:200% center} 100%{background-position:-200% center} }
+@keyframes glow      { 0%,100%{box-shadow:0 0 8px rgba(245,158,11,.4)} 50%{box-shadow:0 0 28px rgba(245,158,11,.8),0 0 60px rgba(245,158,11,.3)} }
+@keyframes lvlUp     { 0%{transform:scale(.8) translateY(20px);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1) translateY(0);opacity:1} }
+@keyframes ownerPulse{ 0%,100%{text-shadow:0 0 10px rgba(245,158,11,.6)} 50%{text-shadow:0 0 30px rgba(245,158,11,1),0 0 60px rgba(245,158,11,.4)} }
+@keyframes float     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+@keyframes spin      { to { transform: rotate(360deg) } }
+@keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:.5} }
+@keyframes slideUp   { from{transform:translateY(100%)} to{transform:translateY(0)} }
+@keyframes popIn     { 0%{transform:scale(.85);opacity:0} 100%{transform:scale(1);opacity:1} }
+@keyframes msgIn     { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
-const [user,setUser]=useState(null);
-const [room,setRoom]=useState("global");
-const [rooms,setRooms]=useState([]);
-const [msgs,setMsgs]=useState([]);
-const [msg,setMsg]=useState("");
-const [tab,setTab]=useState("rooms");
-const [friends,setFriends]=useState([]);
-
-const isOwner=user?.email===OWNER_EMAIL;
-
-// ───────── FIREBASE LOAD ─────────
-useEffect(()=>{
-
-db.ref("rooms").on("value",s=>{
-const d=s.val()||{};
-setRooms(Object.keys(d).map(k=>({...d[k],id:k})));
-});
-
-db.ref("msgs/"+room).on("value",s=>{
-const d=s.val()||{};
-setMsgs(Object.values(d));
-});
-
-},[room]);
-
-// ───────── LOGIN ─────────
-const login=async()=>{
-const email=prompt("email");
-const pass=prompt("password");
-
-if(email===OWNER_EMAIL && pass===OWNER_PASS){
-setUser({name:"OWNER",email,xp:9999,level:100});
-return;
+/* ═══════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════ */
+#root {
+  max-width: 480px;
+  margin: 0 auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: #080810;
 }
 
-auth.signInWithEmailAndPassword(email,pass)
-.then(res=>{
-setUser({
-id:res.user.uid,
-email,
-name:email.split("@")[0],
-xp:0,
-level:1
-});
-});
-};
+/* ═══════════════════════════════════════
+   SCREENS
+═══════════════════════════════════════ */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #080810;
+  overflow: hidden;
+  transition: opacity .25s;
+}
+.screen.hidden { display: none; }
 
-// ───────── REGISTER ─────────
-const register=async()=>{
-const email=prompt("email");
-const pass=prompt("password");
+/* ═══════════════════════════════════════
+   LOGIN SCREEN
+═══════════════════════════════════════ */
+#screen-login {
+  justify-content: center;
+  align-items: center;
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+.login-glow-1 {
+  position: absolute; top: -100px; right: -80px;
+  width: 320px; height: 320px; border-radius: 50%;
+  background: rgba(99,102,241,0.07); filter: blur(80px); pointer-events: none;
+}
+.login-glow-2 {
+  position: absolute; bottom: -80px; left: -60px;
+  width: 240px; height: 240px; border-radius: 50%;
+  background: rgba(245,158,11,0.05); filter: blur(60px); pointer-events: none;
+}
+.login-box {
+  width: 100%; max-width: 420px;
+  display: flex; flex-direction: column; gap: 14px;
+  animation: fadeUp .5s ease; z-index: 2; position: relative;
+}
+.logo-text {
+  font-size: 72px; font-weight: 900; letter-spacing: 10px; line-height: 1;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: float 3s ease-in-out infinite; display: inline-block;
+}
+.logo-sub { color: #475569; font-size: 13px; margin-top: 10px; letter-spacing: 0.5px; }
 
-auth.createUserWithEmailAndPassword(email,pass)
-.then(res=>{
-db.ref("users/"+res.user.uid).set({
-name:email.split("@")[0],
-xp:0,
-level:1
-});
-});
-};
+/* ═══════════════════════════════════════
+   FORM ELEMENTS
+═══════════════════════════════════════ */
+.inp {
+  width: 100%; padding: 13px 16px;
+  border-radius: 16px; border: 1px solid rgba(99,102,241,0.15);
+  background: #16162a; color: #f1f5f9; font-size: 14px;
+  outline: none; direction: rtl;
+}
+.inp::placeholder { color: #475569; }
+.inp:focus { border-color: rgba(99,102,241,0.4); }
+textarea.inp { resize: none; min-height: 60px; }
 
-// ───────── CREATE ROOM ─────────
-const createRoom=()=>{
-const name=prompt("اسم الغرفة");
-if(!name) return;
-
-const id=db.ref("rooms").push().key;
-db.ref("rooms/"+id).set({
-name,
-owner:user.email,
-members:1
-});
-};
-
-// ───────── SEND MESSAGE ─────────
-const send=()=>{
-if(!msg) return;
-
-db.ref("msgs/"+room).push({
-text:msg,
-name:user.name,
-time:Date.now()
-});
-
-setMsg("");
-};
-
-// ───────── UI LOGIN ─────────
-if(!user){
-return(
-<div style={{textAlign:"center",padding:50}}>
-<h1>IT CHAT PRO</h1>
-<button onClick={login}>دخول</button>
-<button onClick={register}>تسجيل</button>
-</div>
-);
+.btn {
+  width: 100%; padding: 13px 20px; border-radius: 16px;
+  border: 1px solid rgba(99,102,241,0.15); background: #0f0f1a;
+  color: #f1f5f9; font-weight: 700; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity .15s, transform .1s;
+}
+.btn:active { transform: scale(.97); }
+.btn.primary {
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  border: none; color: #fff;
+}
+.btn.danger {
+  background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.4); color: #ef4444;
+}
+.btn.ghost { background: transparent; color: #94a3b8; }
+.btn.small {
+  width: auto; padding: 7px 14px; border-radius: 20px; font-size: 12px;
 }
 
-// ───────── APP UI ─────────
-return(
-<div style={{display:"flex",flexDirection:"column",height:"100vh"}}>
+.gender-row { display: flex; gap: 8px; }
+.gender-btn {
+  flex: 1; padding: 10px 4px; border-radius: 10px;
+  border: 1px solid rgba(99,102,241,0.15);
+  background: transparent; color: #94a3b8; font-size: 13px; font-weight: 600;
+  transition: all .2s;
+}
+.gender-btn.active { border-color: #6366f1; background: rgba(99,102,241,0.12); color: #6366f1; }
 
-{/* HEADER */}
-<div style={{padding:10,background:"#111",display:"flex",justifyContent:"space-between"}}>
-<div>{user.name}</div>
-<div>Lv.{user.level}</div>
-</div>
-
-{/* TABS */}
-<div style={{display:"flex"}}>
-<button onClick={()=>setTab("rooms")}>الغرف</button>
-<button onClick={()=>setTab("friends")}>الأصدقاء</button>
-<button onClick={()=>setTab("profile")}>حسابي</button>
-</div>
-
-{/* CONTENT */}
-<div style={{flex:1,overflow:"auto",padding:10}}>
-
-{/* ROOMS */}
-{tab==="rooms" && (
-<>
-<button onClick={createRoom}>+ إنشاء غرفة</button>
-
-<div onClick={()=>setRoom("global")}
-style={{padding:10,background:"#222",margin:5}}>
-🌍 الغرفة العامة
-</div>
-
-{rooms.map(r=>(
-<div key={r.id}
-onClick={()=>setRoom(r.id)}
-style={{padding:10,background:"#1a1a2e",margin:5}}>
-🏠 {r.name}
-</div>
-))}
-</>
-)}
-
-{/* FRIENDS */}
-{tab==="friends" && (
-friends.length===0
-? <div>لا يوجد أصدقاء</div>
-: friends.map(f=>(
-<div key={f.id}>{f.name}</div>
-))
-)}
-
-{/* PROFILE */}
-{tab==="profile" && (
-<div>
-<div>اسم: {user.name}</div>
-<div>XP: {user.xp}</div>
-<div>Level: {user.level}</div>
-
-{isOwner && <div style={{color:"gold"}}>👑 OWNER</div>}
-</div>
-)}
-
-{/* CHAT */}
-{tab==="rooms" && (
-<>
-<div style={{marginTop:10}}>
-{msgs.map((m,i)=>(
-<div key={i} style={{background:"#111",margin:5,padding:8}}>
-<b>{m.name}:</b> {m.text}
-</div>
-))}
-</div>
-</>
-)}
-
-</div>
-
-{/* INPUT */}
-<div style={{display:"flex",padding:10,background:"#111"}}>
-<input
-value={msg}
-onChange={e=>setMsg(e.target.value)}
-style={{flex:1,padding:10}}
-/>
-<button onClick={send}>إرسال</button>
-</div>
-
-</div>
-);
+.divider {
+  display: flex; align-items: center; gap: 10; color: #475569; font-size: 12px;
+}
+.divider::before, .divider::after {
+  content: ''; flex: 1; height: 1px; background: rgba(99,102,241,0.15);
+}
+.error-box {
+  color: #ef4444; font-size: 12px; text-align: center;
+  padding: 6px 10px; background: rgba(239,68,68,0.1);
+  border-radius: 8px; border: 1px solid rgba(239,68,68,.33);
+}
+.back-btn {
+  background: none; border: none; color: #475569; font-size: 13px; text-align: center;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+/* ═══════════════════════════════════════
+   MAIN APP — HEADER
+═══════════════════════════════════════ */
+.app-header {
+  background: #0f0f1a;
+  border-bottom: 1px solid rgba(99,102,241,0.15);
+  padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.app-logo {
+  font-size: 26px; font-weight: 900; letter-spacing: 4px;
+  background: linear-gradient(90deg,#6366f1,#8b5cf6);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.app-logo.owner {
+  background: linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b);
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.owner-tag {
+  font-size: 11px; color: #f59e0b; font-weight: 700;
+  background: rgba(245,158,11,.1); padding: 2px 8px;
+  border-radius: 6px; border: 1px solid rgba(245,158,11,.33);
+  animation: ownerPulse 2s infinite;
+}
+.header-right { display: flex; align-items: center; gap: 12px; }
+.xp-bar-wrap { text-align: center; }
+.xp-label { font-size: 11px; font-weight: 800; color: #6366f1; }
+.xp-label.owner {
+  background: linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b);
+  background-size: 200% auto; animation: shimmer 2s linear infinite;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.xp-track {
+  width: 56px; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.07); margin-top: 2px; overflow: hidden;
+}
+.xp-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg,#6366f1,#8b5cf6);
+  transition: width .5s;
+}
+.xp-fill.owner {
+  width: 100% !important;
+  background: linear-gradient(90deg,#f59e0b,#ef4444,#f59e0b);
+  background-size: 200% auto; animation: shimmer 1.5s linear infinite;
+}
 
+/* ═══════════════════════════════════════
+   AVATAR
+═══════════════════════════════════════ */
+.avatar {
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; color: #fff; flex-shrink: 0; overflow: hidden; position: relative;
+}
+.avatar.owner { border: 2.5px solid #f59e0b; animation: glow 2.5s infinite; }
+.avatar-level {
+  position: absolute; bottom: -5px; right: -8px;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  color: #fff; font-size: 8px; font-weight: 800;
+  padding: 1px 5px; border-radius: 8px; border: 1.5px solid #080810;
+  white-space: nowrap;
+}
+.avatar-level.owner {
+  background: linear-gradient(90deg,#f59e0b,#ef4444,#f59e0b);
+  background-size: 200% auto; animation: shimmer 1.8s linear infinite;
+  font-size: 9px; padding: 2px 7px;
+  box-shadow: 0 0 10px rgba(245,158,11,0.6);
+}
+
+/* ═══════════════════════════════════════
+   CONTENT AREA
+═══════════════════════════════════════ */
+.content-area {
+  flex: 1; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+/* ═══════════════════════════════════════
+   ROOM CARDS
+═══════════════════════════════════════ */
+.section-label {
+  color: #475569; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+}
+.room-official {
+  background: linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08));
+  border: 1.5px solid rgba(99,102,241,.44); border-radius: 16px;
+  padding: 16px 18px; display: flex; align-items: center; gap: 14px;
+  cursor: pointer; box-shadow: 0 4px 24px rgba(99,102,241,0.4);
+  animation: fadeUp .3s ease;
+}
+.room-icon-wrap {
+  width: 54px; height: 54px; border-radius: 14px;
+  background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; flex-shrink: 0;
+}
+.room-name { color: #f1f5f9; font-weight: 800; font-size: 16px; }
+.room-desc { color: #475569; font-size: 12px; margin-top: 2px; }
+.room-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.online-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block; }
+.online-text { color: #10b981; font-size: 11px; }
+.room-badge {
+  background: rgba(99,102,241,0.12); color: #6366f1;
+  font-size: 9px; font-weight: 800; padding: 2px 7px;
+  border-radius: 6px; border: 1px solid rgba(99,102,241,.33);
+}
+.room-arrow { color: #6366f1; font-size: 20px; }
+.room-create {
+  background: rgba(255,255,255,0.02);
+  border: 1.5px dashed rgba(99,102,241,0.15); border-radius: 16px;
+  padding: 16px; display: flex; align-items: center; justify-content: center;
+  gap: 10px; cursor: pointer; color: #475569; font-weight: 700; font-size: 14px;
+}
+.room-card {
+  background: #0f0f1a; border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  animation: fadeUp .25s ease;
+}
+
+/* ═══════════════════════════════════════
+   FRIENDS
+═══════════════════════════════════════ */
+.friend-card {
+  background: #0f0f1a; border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 16px; padding: 12px 14px;
+  display: flex; align-items: center; gap: 12px;
+  animation: fadeUp .25s ease;
+}
+.status-dot {
+  position: absolute; bottom: 0; left: 0;
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid #080810;
+}
+.level-badge {
+  background: rgba(99,102,241,0.12); color: #6366f1;
+  font-size: 9px; font-weight: 800; padding: 2px 7px;
+  border-radius: 8px; border: 1px solid rgba(99,102,241,.33);
+  display: inline-flex; align-items: center;
+}
+
+/* ═══════════════════════════════════════
+   TAB BAR
+═══════════════════════════════════════ */
+.tab-bar {
+  background: #0f0f1a; border-top: 1px solid rgba(99,102,241,0.15);
+  display: flex; flex-shrink: 0; padding-bottom: 14px;
+}
+.tab-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: 3px; padding: 10px 4px;
+  cursor: pointer; position: relative;
+  color: #475569; font-size: 10px; font-weight: 400;
+  transition: color .2s; border: none; background: transparent;
+}
+.tab-item.active { color: #6366f1; font-weight: 700; }
+.tab-item.active.owner-tab { color: #f59e0b; }
+.tab-indicator {
+  position: absolute; top: 0; width: 28px; height: 2.5px;
+  border-radius: 2px; background: #6366f1;
+}
+.tab-indicator.owner { background: #f59e0b; }
+.tab-icon { font-size: 22px; }
+
+/* ═══════════════════════════════════════
+   CHAT ROOM SCREEN
+═══════════════════════════════════════ */
+.room-header {
+  background: #0f0f1a; border-bottom: 1px solid rgba(99,102,241,0.15);
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.back-room-btn {
+  background: none; border: none; color: #6366f1;
+  font-size: 22px; line-height: 1;
+}
+.room-title { color: #f1f5f9; font-weight: 700; font-size: 15px; }
+
+/* Mic seats */
+.seats-bar {
+  background: #0f0f1a; border-bottom: 1px solid rgba(99,102,241,0.15);
+  padding: 14px 16px; display: flex; gap: 10px;
+  justify-content: center; flex-shrink: 0;
+}
+.seat-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.seat {
+  width: 54px; height: 54px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; cursor: pointer; transition: all .2s;
+  position: relative;
+}
+.seat.empty {
+  background: #16162a; border: 1.5px dashed rgba(99,102,241,0.15); color: #475569;
+}
+.seat.taken { font-size: 20px; font-weight: 800; border: 2px solid #6366f155; }
+.seat.owner-seat { border: 2.5px solid #f59e0b; animation: glow 2s infinite; }
+.seat.me { border: 2px solid #6366f1; }
+.seat-name { color: #475569; font-size: 9px; max-width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mic-controls {
+  background: rgba(99,102,241,0.06); border-bottom: 1px solid rgba(99,102,241,0.15);
+  padding: 10px 16px; display: flex; gap: 8px;
+  justify-content: center; flex-shrink: 0;
+}
+.mic-btn {
+  padding: 8px 18px; border-radius: 20px; font-weight: 700; font-size: 13px;
+}
+.mic-btn.active { border: 1px solid #10b981; background: rgba(16,185,129,.1); color: #10b981; }
+.mic-btn.muted  { border: 1px solid #ef4444; background: rgba(239,68,68,.1); color: #ef4444; }
+.mic-btn.leave  { border: 1px solid rgba(239,68,68,.44); background: rgba(239,68,68,.1); color: #ef4444; }
+
+/* Messages */
+.msgs-area {
+  flex: 1; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.msg-wrap { max-width: 80%; display: flex; flex-direction: column; gap: 4px; animation: msgIn .2s ease; }
+.msg-wrap.me  { align-self: flex-start; }
+.msg-wrap.them { align-self: flex-end; }
+.msg-sender {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700;
+}
+.msg-bubble {
+  border-radius: 4px 16px 16px 16px;
+  padding: 10px 14px; font-size: 14px; line-height: 1.55;
+  border: 1px solid rgba(99,102,241,0.15);
+  background: rgba(255,255,255,0.05); color: #f1f5f9;
+}
+.msg-bubble.me {
+  border-radius: 16px 4px 16px 16px;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  border: none; color: #fff;
+}
+.msg-bubble.owner-them {
+  background: linear-gradient(135deg,rgba(245,158,11,.15),rgba(239,68,68,.08));
+  border-color: rgba(245,158,11,.33); color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245,158,11,.1);
+}
+.msg-bubble.me.owner {
+  background: linear-gradient(135deg,#f59e0b,#ef4444);
+}
+.msg-time { color: #475569; font-size: 10px; }
+.msg-tag {
+  font-size: 9px; padding: 1px 5px; border-radius: 5px; font-weight: 800;
+}
+.msg-tag.owner-tag { background: rgba(245,158,11,.15); color: #f59e0b; }
+.msg-tag.admin-tag { background: rgba(99,102,241,0.12); color: #6366f1; }
+.msg-tag.bot-tag   { background: rgba(99,102,241,0.12); color: #6366f1; }
+
+/* Chat input */
+.chat-input-bar {
+  background: #0f0f1a; border-top: 1px solid rgba(99,102,241,0.15);
+  padding: 10px 14px; display: flex; gap: 10px;
+  align-items: center; flex-shrink: 0;
+}
+.chat-inp {
+  flex: 1; background: #16162a; border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 24px; padding: 10px 16px; color: #f1f5f9;
+  font-size: 14px; outline: none; direction: rtl; font-family: inherit;
+}
+.chat-inp:focus { border-color: rgba(99,102,241,0.4); }
+.send-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: none;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  color: #fff; font-size: 18px; display: flex; align-items: center; justify-content: center;
+}
+.send-btn.owner { background: linear-gradient(135deg,#f59e0b,#ef4444); animation: glow 2s infinite; }
+
+/* ═══════════════════════════════════════
+   PROFILE
+═══════════════════════════════════════ */
+.profile-owner-card {
+  background: linear-gradient(135deg,rgba(245,158,11,.12),rgba(239,68,68,.08));
+  border: 1.5px solid rgba(245,158,11,.44); border-radius: 20px;
+  padding: 20px; position: relative; overflow: hidden;
+  box-shadow: 0 8px 40px rgba(245,158,11,.15);
+}
+.profile-card {
+  background: linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08));
+  border: 1px solid rgba(99,102,241,.33); border-radius: 20px;
+  padding: 20px; display: flex; align-items: center; gap: 16px;
+}
+.xp-info-card {
+  background: #0f0f1a; border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 16px; padding: 14px 16px;
+}
+.xp-info-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid rgba(99,102,241,0.15);
+}
+.badge-item {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.33);
+  display: flex; align-items: center; justify-content: center; font-size: 22px;
+}
+
+/* ═══════════════════════════════════════
+   MODAL OVERLAY
+═══════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+  display: flex; align-items: flex-end; justify-content: center;
+  z-index: 100; backdrop-filter: blur(8px);
+}
+.modal-overlay.hidden { display: none; }
+.modal-sheet {
+  background: #0f0f1a; border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 22px 22px 0 0; padding: 24px 20px 44px;
+  width: 100%; max-width: 480px;
+  display: flex; flex-direction: column; gap: 14px;
+  animation: slideUp .3s ease;
+}
+.modal-title { color: #f1f5f9; font-size: 18px; font-weight: 800; text-align: center; }
+.icon-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.icon-btn {
+  width: 42px; height: 42px; border-radius: 12px; font-size: 20px;
+  border: 1px solid rgba(99,102,241,0.15); background: #16162a;
+  transition: all .2s;
+}
+.icon-btn.selected { border-color: #6366f1; background: rgba(99,102,241,0.12); }
+
+/* ═══════════════════════════════════════
+   ADMIN PANEL
+═══════════════════════════════════════ */
+.admin-header {
+  background: linear-gradient(135deg,rgba(245,158,11,0.15),rgba(239,68,68,0.08));
+  border-bottom: 1px solid rgba(245,158,11,.44);
+  padding: 14px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.admin-title {
+  font-size: 20px; font-weight: 900;
+  background: linear-gradient(90deg,#f59e0b,#fbbf24);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.admin-tabs { display: flex; border-bottom: 1px solid rgba(99,102,241,0.15); background: #0f0f1a; flex-shrink: 0; }
+.admin-tab {
+  flex: 1; padding: 12px 4px; border: none; background: transparent;
+  color: #475569; font-weight: 400; font-size: 11px;
+  border-bottom: 2px solid transparent; transition: all .2s;
+}
+.admin-tab.active { color: #f59e0b; font-weight: 700; border-bottom-color: #f59e0b; }
+.admin-content { flex: 1; overflow-y: auto; padding: 14px; }
+.admin-user-card {
+  background: #0f0f1a; border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 16px; padding: 12px 14px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.admin-actions { display: flex; gap: 6px; }
+.admin-action-btn {
+  padding: 5px 9px; border-radius: 8px; font-size: 11px; font-weight: 600;
+}
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat-card {
+  background: #0f0f1a; border-radius: 16px;
+  padding: 16px 14px; text-align: center;
+}
+.stat-val { font-size: 28px; font-weight: 900; }
+.stat-label { color: #475569; font-size: 11px; margin-top: 4px; }
+
+/* ═══════════════════════════════════════
+   TOAST
+═══════════════════════════════════════ */
+#toast-lvlup {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  color: #fff; padding: 14px 28px; border-radius: 20px;
+  font-weight: 800; font-size: 16px; z-index: 300;
+  box-shadow: 0 8px 32px rgba(99,102,241,.5);
+  animation: lvlUp .5s ease; display: flex; align-items: center; gap: 10px;
+  white-space: nowrap;
+}
+#toast-lvlup.hidden { display: none; }
+
+/* ═══════════════════════════════════════
+   LOADING
+═══════════════════════════════════════ */
+#loading-screen {
+  position: fixed; inset: 0; background: #080810;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px; z-index: 999;
+}
+.loader-logo {
+  font-size: 64px; font-weight: 900; letter-spacing: 8px;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: float 2s ease-in-out infinite;
+}
+.loader-ring {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid rgba(99,102,241,0.2);
+  border-top-color: #6366f1;
+  animation: spin 1s linear infinite;
+}
+
+/* ═══════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════ */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-6 { gap: 6px; }
+.gap-8 { gap: 8px; }
+.gap-12 { gap: 12px; }
+.flex-1 { flex: 1; }
+.mt-4 { margin-top: 4px; }
+.mt-6 { margin-top: 6px; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.text-center { text-align: center; }
+.hidden { display: none !important; }
+.fw-700 { font-weight: 700; }
+.fw-800 { font-weight: 800; }
+.fw-900 { font-weight: 900; }
+.fs-10 { font-size: 10px; }
+.fs-11 { font-size: 11px; }
+.fs-12 { font-size: 12px; }
+.fs-13 { font-size: 13px; }
+.fs-14 { font-size: 14px; }
+.col-accent { color: #6366f1; }
+.col-gold   { color: #f59e0b; }
+.col-green  { color: #10b981; }
+.col-red    { color: #ef4444; }
+.col-dim    { color: #475569; }
+.col-mid    { color: #94a3b8; }
+.col-text   { color: #f1f5f9; }
+.shrink-0 { flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LOADING SCREEN
+═══════════════════════════════════════ -->
+<div id="loading-screen">
+  <div class="loader-logo">IT</div>
+  <div class="loader-ring"></div>
+</div>
+
+<!-- ══════════════════════════════════════
+     ROOT
+═══════════════════════════════════════ -->
+<div id="root">
+
+  <!-- ────────── LOGIN SCREEN ────────── -->
+  <div id="screen-login" class="screen hidden">
+    <div class="login-glow-1"></div>
+    <div class="login-glow-2"></div>
+    <div class="login-box">
+      <div class="text-center" style="margin-bottom:24px">
+        <div class="logo-text">IT</div>
+        <div class="logo-sub">Chat & Voice — تحدث، تواصل، استمتع</div>
+      </div>
+      <!-- MAIN MODE -->
+      <div id="login-main">
+        <button class="btn primary" id="btn-goto-signup" style="margin-bottom:10px">إنشاء حساب جديد</button>
+        <button class="btn" id="btn-goto-signin" style="margin-bottom:10px">تسجيل الدخول</button>
+        <div class="divider" style="margin-bottom:10px">أو</div>
+        <button class="btn ghost" id="btn-guest">👤 دخول كزائر</button>
+      </div>
+      <!-- SIGNUP MODE -->
+      <div id="login-signup" class="hidden">
+        <div class="text-center col-text fw-700" style="margin-bottom:4px">إنشاء حساب جديد</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+          <input class="inp" id="su-name"   type="text"     placeholder="الاسم (Username)"/>
+          <input class="inp" id="su-email"  type="email"    placeholder="البريد الإلكتروني"/>
+          <input class="inp" id="su-pass"   type="password" placeholder="كلمة المرور"/>
+          <div class="gender-row">
+            <button class="gender-btn" data-gender="male">♂ ذكر</button>
+            <button class="gender-btn" data-gender="female">♀ أنثى</button>
+            <button class="gender-btn active" data-gender="unset">🌐</button>
+          </div>
+          <div id="su-err" class="error-box hidden"></div>
+          <button class="btn primary" id="btn-signup">إنشاء الحساب ✓</button>
+          <button class="back-btn" id="btn-back-su">← رجوع</button>
+        </div>
+      </div>
+      <!-- SIGNIN MODE -->
+      <div id="login-signin" class="hidden">
+        <div class="text-center col-text fw-700" style="margin-bottom:4px">تسجيل الدخول</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+          <input class="inp" id="si-name"  type="text"     placeholder="الاسم (اختياري)"/>
+          <input class="inp" id="si-email" type="email"    placeholder="البريد الإلكتروني"/>
+          <input class="inp" id="si-pass"  type="password" placeholder="كلمة المرور"/>
+          <div id="si-err" class="error-box hidden"></div>
+          <button class="btn primary" id="btn-signin">دخول →</button>
+          <button class="back-btn" id="btn-back-si">← رجوع</button>
+        </div>
+      </div>
+      <p class="col-dim fs-10 text-center" style="margin-top:4px">بالمتابعة، أنت توافق على سياسة الخصوصية وشروط الخدمة</p>
+    </div>
+  </div>
+
+  <!-- ────────── MAIN APP SCREEN ────────── -->
+  <div id="screen-main" class="screen hidden" style="display:flex;flex-direction:column">
+    <!-- Header -->
+    <div class="app-header">
+      <div class="flex items-center gap-8">
+        <div id="hdr-logo" class="app-logo">IT</div>
+        <span id="hdr-owner-tag" class="owner-tag hidden">👑 OWNER</span>
+      </div>
+      <div class="header-right">
+        <button id="btn-admin-panel" class="btn small hidden" style="border-color:rgba(245,158,11,.44);background:rgba(245,158,11,.1);color:#f59e0b">🛡️ لوحة التحكم</button>
+        <div class="xp-bar-wrap">
+          <div id="hdr-xp-label" class="xp-label">0 XP</div>
+          <div class="xp-track"><div id="hdr-xp-fill" class="xp-fill" style="width:0%"></div></div>
+        </div>
+        <div style="position:relative;cursor:pointer" id="hdr-avatar-wrap">
+          <div id="hdr-avatar" class="avatar" style="width:38px;height:38px;font-size:14px;background:#6366f1;border:2px solid #6366f155"></div>
+          <div id="hdr-avatar-level" class="avatar-level">Lv.0</div>
+        </div>
+      </div>
+    </div>
+    <!-- Content -->
+    <div class="content-area" id="main-content">
+      <!-- HOME TAB -->
+      <div id="tab-home">
+        <div class="section-label">الغرفة الرسمية</div>
+        <div class="room-official" id="btn-enter-official" style="margin-top:8px">
+          <div class="room-icon-wrap">👑</div>
+          <div style="flex:1">
+            <div class="flex items-center gap-8 mt-4">
+              <span class="room-name">الغرفة الرسمية</span>
+              <span class="room-badge">رسمية ✓</span>
+            </div>
+            <div class="room-desc">الغرفة العامة للجميع — تحدث بحرية</div>
+            <div class="room-meta">
+              <span class="online-dot"></span>
+              <span class="online-text">1 متصل</span>
+              <span class="col-dim fs-11">· 1 عضو</span>
+            </div>
+          </div>
+          <span class="room-arrow">‹</span>
+        </div>
+
+        <div class="section-label" style="margin-top:12px">غرفي الخاصة</div>
+        <div class="room-create" id="btn-create-room" style="margin-top:8px">
+          <span style="font-size:24px;font-weight:300;line-height:1">＋</span> أنشئ غرفتك الخاصة
+        </div>
+        <div id="my-rooms-list"></div>
+        <div id="no-rooms-msg" class="col-dim fs-12 text-center" style="padding:6px 0">لا توجد غرف خاصة بعد</div>
+      </div>
+
+      <!-- FRIENDS TAB -->
+      <div id="tab-friends" class="hidden">
+        <div class="section-label" id="friends-count-label">0/200 صديق</div>
+        <div id="friends-list" style="margin-top:8px;display:flex;flex-direction:column;gap:10px">
+          <div class="col-dim fs-12 text-center" style="padding:20px">لا يوجد أصدقاء بعد</div>
+        </div>
+        <button class="btn primary" style="margin-top:10px" id="btn-add-friend">+ إضافة أصدقاء</button>
+      </div>
+
+      <!-- PROFILE TAB -->
+      <div id="tab-profile" class="hidden">
+        <!-- rendered by JS -->
+      </div>
+    </div>
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab-item active" data-tab="home">
+        <div class="tab-indicator" id="ind-home"></div>
+        <span class="tab-icon">🏠</span><span>الغرف</span>
+      </button>
+      <button class="tab-item" data-tab="friends">
+        <div class="tab-indicator hidden" id="ind-friends"></div>
+        <span class="tab-icon">👥</span><span>الأصدقاء</span>
+      </button>
+      <button class="tab-item" data-tab="profile">
+        <div class="tab-indicator hidden" id="ind-profile"></div>
+        <span class="tab-icon">👤</span><span>حسابي</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ────────── CHAT ROOM SCREEN ────────── -->
+  <div id="screen-room" class="screen hidden" style="display:flex;flex-direction:column">
+    <div class="room-header">
+      <button class="back-room-btn" id="btn-leave-room">‹</button>
+      <div id="room-icon-display" style="width:40px;height:40px;border-radius:12px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.15);display:flex;align-items:center;justify-content:center;font-size:20px">👑</div>
+      <div style="flex:1">
+        <div class="room-title" id="room-title-display">الغرفة الرسمية</div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="online-dot"></span>
+          <span class="online-text fs-11">1 متصل</span>
+        </div>
+      </div>
+      <span id="room-official-badge" class="room-badge hidden">رسمية</span>
+    </div>
+    <!-- Mic Seats -->
+    <div class="seats-bar" id="seats-bar">
+      <!-- rendered by JS -->
+    </div>
+    <!-- Mic Controls -->
+    <div class="mic-controls hidden" id="mic-controls">
+      <button class="mic-btn active" id="mic-toggle-btn">🎤 مفعّل</button>
+      <button class="mic-btn leave" id="mic-leave-btn">نزول من المايك ↓</button>
+    </div>
+    <!-- Messages -->
+    <div class="msgs-area" id="msgs-area"></div>
+    <!-- Input -->
+    <div class="chat-input-bar">
+      <span style="font-size:22px;cursor:pointer">😊</span>
+      <input class="chat-inp" id="chat-input" placeholder="اكتب رسالة..."/>
+      <button class="send-btn" id="send-btn">➤</button>
+    </div>
+  </div>
+
+  <!-- ────────── ADMIN PANEL SCREEN ────────── -->
+  <div id="screen-admin" class="screen hidden" style="display:flex;flex-direction:column">
+    <div class="admin-header">
+      <button id="btn-close-admin" style="background:none;border:none;color:#f59e0b;font-size:22px">‹</button>
+      <div class="admin-title">🛡️ لوحة التحكم</div>
+      <span style="margin-right:auto;background:rgba(245,158,11,.15);color:#f59e0b;font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px;border:1px solid rgba(245,158,11,.44)">OWNER ONLY</span>
+    </div>
+    <div class="admin-tabs">
+      <button class="admin-tab active" data-atab="users">👥 الأعضاء</button>
+      <button class="admin-tab" data-atab="rooms">🏠 الغرف</button>
+      <button class="admin-tab" data-atab="announce">📢 إعلان</button>
+      <button class="admin-tab" data-atab="stats">📊 إحصاء</button>
+    </div>
+    <div class="admin-content" id="admin-content"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MODALS
+═══════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="modal-create-room">
+  <div class="modal-sheet">
+    <div class="modal-title">✨ إنشاء غرفة جديدة</div>
+    <div class="icon-picker" id="icon-picker"></div>
+    <input class="inp" id="room-name-inp" placeholder="اسم الغرفة *"/>
+    <textarea class="inp" id="room-desc-inp" placeholder="وصف الغرفة (اختياري)"></textarea>
+    <button class="btn primary" id="btn-confirm-create">إنشاء الغرفة 🚀</button>
+    <button class="btn ghost" id="btn-cancel-create">إلغاء</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-edit-profile">
+  <div class="modal-sheet">
+    <div class="modal-title">✏️ تعديل الملف الشخصي</div>
+    <input class="inp" id="edit-name-inp" placeholder="الاسم"/>
+    <div class="gender-row" id="edit-gender-row">
+      <button class="gender-btn" data-egender="male">♂ ذكر</button>
+      <button class="gender-btn" data-egender="female">♀ أنثى</button>
+      <button class="gender-btn active" data-egender="unset">🌐 غير محدد</button>
+    </div>
+    <button class="btn primary" id="btn-save-profile">حفظ</button>
+    <button class="btn ghost" id="btn-cancel-edit">إلغاء</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     LEVEL UP TOAST
+═══════════════════════════════════════ -->
+<div id="toast-lvlup" class="hidden">⬆️ مبروك! وصلت للمستوى <span id="toast-lvl-num">1</span>!</div>
+
+<!-- ══════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════ -->
+<script>
+// ═══════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════
+const OWNER = {
+  email:    "admin@it-app.com",
+  password: "ITowner2025",
+};
+const OWNER_PROFILE = {
+  id:"OWNER", name:"I T", email:OWNER.email,
+  color:"#f59e0b", gender:"male",
+  xp:10000, level:100,
+  isOwner:true, isAdmin:true, isGuest:false,
+  badges:["👑","💎","🔥","⚡","🌟","🎖️","🏆","🎤","💬","🛡️"],
+  title:"المالك والمؤسس",
+};
+
+const ICONS = ["🏠","🎵","💻","📚","🎮","✈️","🌍","🎨","🔥","⚡","🌙","🎤","🏋️","🍔","🎬","🌺"];
+const OFFICIAL_ROOM = { id:"official", name:"الغرفة الرسمية", icon:"👑", desc:"الغرفة العامة للجميع — تحدث بحرية", isOfficial:true };
+
+const LEVEL_TITLES = {
+  0:"مبتدئ",5:"متحمس",10:"نشيط",20:"محترف",30:"خبير",
+  40:"نجم",50:"أسطورة",60:"ماسي",70:"ملكي",80:"إمبراطور",90:"خارق",100:"المالك 👑"
+};
+const getLevelTitle = (lvl) => {
+  const keys = Object.keys(LEVEL_TITLES).map(Number).sort((a,b)=>b-a);
+  for(const k of keys) if(lvl>=k) return LEVEL_TITLES[k];
+  return "مبتدئ";
+};
+const calcLevel = (xp) => Math.min(100, Math.floor(xp/100));
+const xpInLevel = (xp) => xp % 100;
+const fmtTime = () => { const n=new Date(); return `${n.getHours()}:${String(n.getMinutes()).padStart(2,"0")}`; };
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let state = {
+  user: null,
+  currentRoom: null,
+  myRooms: [],
+  members: [],
+  currentTab: "home",
+  currentAdminTab: "users",
+  selectedIcon: "🏠",
+  editGender: "unset",
+  signupGender: "unset",
+  seats: [
+    {id:1,user:null,muted:false},{id:2,user:null,muted:false},
+    {id:3,user:null,muted:false},{id:4,user:null,muted:false},{id:5,user:null,muted:false}
+  ],
+  onMic: false,
+  micMuted: false,
+  messages: [],
+  msgXPCount: 0,
+  xpIntervalId: null,
+  micXPIntervalId: null,
+};
+
+// ═══════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════
+const $ = (id) => document.getElementById(id);
+const show = (el) => { if(typeof el==="string") el=$(el); el && el.classList.remove("hidden"); };
+const hide = (el) => { if(typeof el==="string") el=$(el); el && el.classList.add("hidden"); };
+const toggle = (el, show) => { if(typeof el==="string") el=$(el); if(!el) return; show ? el.classList.remove("hidden") : el.classList.add("hidden"); };
+
+function avatarHTML(name, color, size, isOwner=false, extraStyle="") {
+  const initials = (name||"?")[0].toUpperCase();
+  const border = isOwner ? `2.5px solid #f59e0b` : `2px solid ${color}55`;
+  const anim   = isOwner ? `animation:glow 2.5s infinite;` : "";
+  return `<div class="avatar ${isOwner?"owner":""}" style="width:${size}px;height:${size}px;font-size:${size*0.36}px;background:${color};border:${border};${anim}${extraStyle}">${initials}</div>`;
+}
+
+function levelBadgeHTML(level, isOwner=false) {
+  if(isOwner) return `<span class="level-badge" style="background:linear-gradient(90deg,#f59e0b,#ef4444,#f59e0b);background-size:200% auto;animation:shimmer 2s linear infinite;color:#fff;font-size:11px;padding:3px 10px;box-shadow:0 0 12px rgba(245,158,11,0.4);border:1px solid rgba(245,158,11,0.5)">👑 المستوى 100 — MAX</span>`;
+  return `<span class="level-badge">Lv.${level}</span>`;
+}
+
+function tagHTML(text, type) {
+  return `<span class="msg-tag ${type}-tag">${text}</span>`;
+}
+
+// ═══════════════════════════════════════
+// SCREEN NAVIGATION
+// ═══════════════════════════════════════
+function showScreen(id) {
+  ["screen-login","screen-main","screen-room","screen-admin"].forEach(s=>{
+    const el=$(s);
+    if(el){ el.classList.add("hidden"); el.style.display="none"; }
+  });
+  const el=$(id);
+  if(el){ el.classList.remove("hidden"); el.style.display="flex"; }
+}
+
+// ═══════════════════════════════════════
+// XP SYSTEM
+// ═══════════════════════════════════════
+function addXP(amount) {
+  if(!state.user || state.user.isOwner) return;
+  const prev = state.user.level;
+  state.user.xp += amount;
+  state.user.level = calcLevel(state.user.xp);
+  if(state.user.level > prev) showLvlUp(state.user.level);
+  updateHeaderXP();
+}
+
+function showLvlUp(level) {
+  $("toast-lvl-num").textContent = level;
+  show("toast-lvlup");
+  setTimeout(()=>hide("toast-lvlup"), 3500);
+}
+
+function startXPTimer() {
+  clearInterval(state.xpIntervalId);
+  state.xpIntervalId = setInterval(()=>addXP(1), 5*60*1000);
+}
+
+// ═══════════════════════════════════════
+// UPDATE HEADER
+// ═══════════════════════════════════════
+function updateHeaderXP() {
+  const u = state.user;
+  if(!u) return;
+  const lvl  = u.isOwner ? 100 : calcLevel(u.xp);
+  const pct  = u.isOwner ? 100 : xpInLevel(u.xp);
+  const logo = $("hdr-logo");
+  const fill = $("hdr-xp-fill");
+  const lbl  = $("hdr-xp-label");
+  const avEl = $("hdr-avatar");
+  const avLv = $("hdr-avatar-level");
+
+  logo.className = u.isOwner ? "app-logo owner" : "app-logo";
+  lbl.className  = u.isOwner ? "xp-label owner" : "xp-label";
+  lbl.textContent = u.isOwner ? "👑 Lv.100 MAX" : `${u.xp} XP`;
+  fill.className  = u.isOwner ? "xp-fill owner" : "xp-fill";
+  if(!u.isOwner) fill.style.width = pct + "%";
+
+  avEl.textContent = (u.name||"?")[0].toUpperCase();
+  avEl.style.background = u.color;
+  avEl.className = `avatar${u.isOwner?" owner":""}`;
+  avEl.style.border = u.isOwner ? "2.5px solid #f59e0b" : `2px solid ${u.color}55`;
+
+  avLv.className = u.isOwner ? "avatar-level owner" : "avatar-level";
+  avLv.textContent = u.isOwner ? "👑 MAX 100" : `Lv.${lvl}`;
+
+  toggle("hdr-owner-tag", u.isOwner);
+  toggle("btn-admin-panel", u.isOwner);
+
+  const tabBar = document.querySelector(".tab-bar");
+  if(tabBar) {
+    const border = u.isOwner ? `1px solid rgba(245,158,11,.33)` : `1px solid rgba(99,102,241,0.15)`;
+    tabBar.style.borderTopColor = u.isOwner ? "rgba(245,158,11,.33)" : "rgba(99,102,241,0.15)";
+  }
+}
+
+// ═══════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════
+function showLoginMode(mode) {
+  hide("login-main"); hide("login-signup"); hide("login-signin");
+  if(mode==="main")   show("login-main");
+  if(mode==="signup") show("login-signup");
+  if(mode==="signin") show("login-signin");
+}
+
+function setSignupGender(g) {
+  state.signupGender = g;
+  document.querySelectorAll("[data-gender]").forEach(b=>{
+    b.classList.toggle("active", b.dataset.gender===g);
+  });
+}
+
+function doLogin(user) {
+  state.user = user;
+  showScreen("screen-main");
+  updateHeaderXP();
+  renderTab("home");
+  if(!user.isOwner) { addXP(10); startXPTimer(); }
+}
+
+$("btn-goto-signup").onclick = ()=>showLoginMode("signup");
+$("btn-goto-signin").onclick = ()=>showLoginMode("signin");
+$("btn-back-su").onclick     = ()=>showLoginMode("main");
+$("btn-back-si").onclick     = ()=>{ showLoginMode("main"); hide("si-err"); };
+$("btn-guest").onclick = ()=>doLogin({
+  id:"guest_"+Date.now(), name:"زائر", email:"", color:"#94a3b8",
+  gender:"unset", xp:0, level:0, isOwner:false, isAdmin:false, isGuest:true, badges:[], title:"زائر"
+});
+
+document.querySelectorAll("[data-gender]").forEach(b=>{
+  b.onclick = ()=>setSignupGender(b.dataset.gender);
+});
+
+$("btn-signup").onclick = ()=>{
+  const name  = $("su-name").value.trim();
+  const email = $("su-email").value.trim();
+  const pass  = $("su-pass").value;
+  const err   = $("su-err");
+
+  if(email.toLowerCase()===OWNER.email.toLowerCase() && pass===OWNER.password) return doLogin(OWNER_PROFILE);
+  if(!name)  { err.textContent="أدخل الاسم"; show(err); return; }
+  if(!email) { err.textContent="أدخل البريد"; show(err); return; }
+  if(!pass)  { err.textContent="أدخل كلمة المرور"; show(err); return; }
+
+  /* ─ Firebase Auth (uncomment when connected) ─
+  window.FB.createUserWithEmailAndPassword(window.FB_AUTH, email, pass)
+    .then(cred => {
+      const uid = cred.user.uid;
+      const userData = { id:uid, name, email, color:"#6366f1", gender:state.signupGender, xp:0, level:0, isOwner:false, isAdmin:false, isGuest:false, badges:[], title:"عضو" };
+      return window.FB.setDoc(window.FB.doc(window.FB_DB,"users",uid), userData).then(()=>userData);
+    })
+    .then(userData => doLogin(userData))
+    .catch(e => { err.textContent = e.message; show(err); });
+  */
+
+  hide(err);
+  doLogin({ id:"u_"+Date.now(), name, email, color:"#6366f1", gender:state.signupGender, xp:0, level:0, isOwner:false, isAdmin:false, isGuest:false, badges:[], title:"عضو" });
+};
+
+$("btn-signin").onclick = ()=>{
+  const email = $("si-email").value.trim();
+  const pass  = $("si-pass").value;
+  const name  = $("si-name").value.trim();
+  const err   = $("si-err");
+
+  if(email.toLowerCase()===OWNER.email.toLowerCase() && pass===OWNER.password) return doLogin(OWNER_PROFILE);
+  if(!email || !pass) { err.textContent="أدخل بيانات الدخول"; show(err); return; }
+
+  /* ─ Firebase Auth (uncomment when connected) ─
+  window.FB.signInWithEmailAndPassword(window.FB_AUTH, email, pass)
+    .then(cred => {
+      return window.FB.getDoc(window.FB.doc(window.FB_DB,"users",cred.user.uid));
+    })
+    .then(snap => {
+      const data = snap.exists() ? snap.data() : { id:snap.id, name:name||email.split("@")[0], email, color:"#6366f1", gender:"unset", xp:0, level:0, isOwner:false, isAdmin:false, isGuest:false, badges:[], title:"عضو" };
+      doLogin(data);
+    })
+    .catch(e => { err.textContent = e.message; show(err); });
+  */
+
+  hide(err);
+  doLogin({ id:"u_"+Date.now(), name:name||email.split("@")[0], email, color:"#6366f1", gender:"unset", xp:0, level:0, isOwner:false, isAdmin:false, isGuest:false, badges:[], title:"عضو" });
+};
+
+// ═══════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════
+function renderTab(tab) {
+  state.currentTab = tab;
+  ["home","friends","profile"].forEach(t=>{
+    const el=$(`tab-${t}`); if(el) toggle(el, t===tab);
+    const ind=$(`ind-${t}`); if(ind) toggle(ind, t===tab);
+    const btn=document.querySelector(`[data-tab="${t}"]`);
+    if(btn){ btn.classList.toggle("active", t===tab); btn.classList.toggle("owner-tab", t===tab && state.user?.isOwner); }
+  });
+  if(tab==="profile") renderProfile();
+  if(tab==="home") renderRooms();
+}
+
+document.querySelectorAll("[data-tab]").forEach(btn=>{
+  btn.onclick = ()=>renderTab(btn.dataset.tab);
+});
+$("hdr-avatar-wrap").onclick = ()=>renderTab("profile");
+
+// ═══════════════════════════════════════
+// HOME / ROOMS
+// ═══════════════════════════════════════
+function renderRooms() {
+  const list = $("my-rooms-list");
+  const noMsg = $("no-rooms-msg");
+  list.innerHTML = "";
+  if(state.myRooms.length===0) { show(noMsg); return; }
+  hide(noMsg);
+  state.myRooms.forEach(r=>{
+    const card = document.createElement("div");
+    card.className = "room-card";
+    card.style.marginTop = "8px";
+    card.innerHTML = `
+      <div style="width:48px;height:48px;border-radius:12px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${r.icon||"🏠"}</div>
+      <div style="flex:1">
+        <div class="col-text fw-700 fs-14">${r.name}</div>
+        <div class="col-dim fs-12">${r.desc}</div>
+      </div>
+      <span class="col-mid" style="font-size:18px">‹</span>`;
+    card.onclick = ()=>enterRoom(r);
+    list.appendChild(card);
+  });
+}
+
+$("btn-enter-official").onclick = ()=>enterRoom(OFFICIAL_ROOM);
+
+// ═══════════════════════════════════════
+// CHAT ROOM
+// ═══════════════════════════════════════
+function enterRoom(room) {
+  state.currentRoom = room;
+  state.messages = [];
+  state.msgXPCount = 0;
+  state.onMic = false;
+  state.micMuted = false;
+  state.seats = [
+    {id:1,user:null,muted:false},{id:2,user:null,muted:false},
+    {id:3,user:null,muted:false},{id:4,user:null,muted:false},{id:5,user:null,muted:false}
+  ];
+
+  $("room-title-display").textContent = room.name;
+  $("room-icon-display").textContent = room.icon || "🏠";
+  toggle("room-official-badge", !!room.isOfficial);
+
+  // Style header border for owner
+  const rh = document.querySelector(".room-header");
+  if(rh) rh.style.borderBottomColor = state.user.isOwner ? "rgba(245,158,11,.55)" : "rgba(99,102,241,0.15)";
+
+  const sendBtn = $("send-btn");
+  sendBtn.className = state.user.isOwner ? "send-btn owner" : "send-btn";
+  $("chat-input").placeholder = state.user.isOwner ? "رسالة المالك 👑..." : "اكتب رسالة...";
+
+  renderSeats();
+  renderMsgs();
+
+  // Welcome bot message
+  addMessage({
+    id:"bot_"+Date.now(), uid:"bot", name:"IT Bot", color:"#6366f1",
+    text: room.isOfficial ? `مرحباً ${state.user.name}! أهلاً بك في الغرفة الرسمية 🎉` : `مرحباً بك في "${room.name}" 🎉`,
+    time: fmtTime(), isBot:true
+  });
+
+  showScreen("screen-room");
+
+  /* ─ Firebase Realtime Messages (uncomment when connected) ─
+  const q = window.FB.query(window.FB.collection(window.FB_DB, "rooms", room.id, "messages"), window.FB.orderBy("ts"));
+  state.roomUnsub = window.FB.onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
+      if(change.type==="added") addMessage({id:change.doc.id, ...change.doc.data()});
+    });
+  });
+  */
+}
+
+function leaveRoom() {
+  if(state.onMic) leaveMic();
+  if(state.micXPIntervalId) { clearInterval(state.micXPIntervalId); state.micXPIntervalId=null; }
+  if(state.roomUnsub) { state.roomUnsub(); state.roomUnsub=null; }
+  state.currentRoom = null;
+  showScreen("screen-main");
+  renderTab(state.currentTab);
+}
+
+$("btn-leave-room").onclick = leaveRoom;
+
+function renderSeats() {
+  const bar = $("seats-bar");
+  bar.innerHTML = "";
+  state.seats.forEach((seat,i)=>{
+    const wrap = document.createElement("div");
+    wrap.className = "seat-wrap";
+    const u = seat.user;
+    let seatClass = "seat";
+    if(!u) seatClass += " empty";
+    else if(u.isOwner) seatClass += " owner-seat";
+    else if(u.isMe) seatClass += " me taken";
+    else seatClass += " taken";
+
+    const bgColor = u ? `${u.color}22` : "";
+    const initials = u ? u.name[0] : "🎤";
+    const seatStyle = u ? `background:${bgColor};color:#fff;font-size:20px;font-weight:800;` : "";
+    const crownBadge = u?.isOwner ? `<span style="position:absolute;top:-8px;right:-8px;font-size:14px">👑</span>` : "";
+    const mutedBadge = seat.muted&&u ? `<span style="position:absolute;bottom:-4px;right:-4px;font-size:11px;background:#080810;border-radius:50%">🔇</span>` : "";
+
+    wrap.innerHTML = `
+      <div class="${seatClass}" style="${seatStyle}" data-seatid="${seat.id}">
+        ${initials}${crownBadge}${mutedBadge}
+      </div>
+      <span class="seat-name" style="color:${u?.isOwner?'#f59e0b':u?.color||'#475569'}">${u?u.name.split(" ")[0]:`${i+1}`}</span>`;
+
+    wrap.querySelector(".seat").onclick = ()=>{
+      if(!u && !state.onMic) takeMic();
+      else if(u?.isMe && !state.user.isOwner) leaveMic();
+      else if(u && (state.user.isOwner||state.user.isAdmin) && !u?.isMe) adminMuteSeat(seat.id);
+    };
+    bar.appendChild(wrap);
+  });
+}
+
+function takeMic() {
+  const empty = state.seats.findIndex(s=>!s.user);
+  if(empty===-1) return;
+  state.seats[empty].user = { name:state.user.name, color:state.user.color, isMe:true, isOwner:state.user.isOwner };
+  state.onMic = true;
+  state.micMuted = false;
+  show("mic-controls");
+  $("mic-toggle-btn").className = "mic-btn active";
+  $("mic-toggle-btn").textContent = "🎤 مفعّل";
+  renderSeats();
+  state.micXPIntervalId = setInterval(()=>addXP(2), 60000);
+}
+function leaveMic() {
+  state.seats = state.seats.map(s=>s.user?.isMe?{...s,user:null}:s);
+  state.onMic = false;
+  hide("mic-controls");
+  renderSeats();
+  clearInterval(state.micXPIntervalId); state.micXPIntervalId=null;
+}
+function adminMuteSeat(id) {
+  state.seats = state.seats.map(s=>s.id===id?{...s,muted:!s.muted}:s);
+  renderSeats();
+}
+
+$("mic-toggle-btn").onclick = ()=>{
+  state.micMuted = !state.micMuted;
+  const btn = $("mic-toggle-btn");
+  btn.className = state.micMuted ? "mic-btn muted" : "mic-btn active";
+  btn.textContent = state.micMuted ? "🔇 مكتوم" : "🎤 مفعّل";
+};
+$("mic-leave-btn").onclick = leaveMic;
+
+// Messages
+function addMessage(msg) {
+  state.messages.push(msg);
+  appendMessageEl(msg);
+}
+
+function appendMessageEl(msg) {
+  const area = $("msgs-area");
+  const isMe = msg.uid === state.user?.id;
+  const wrap = document.createElement("div");
+  wrap.className = `msg-wrap ${isMe?"me":"them"}`;
+
+  let senderHTML = "";
+  if(!isMe) {
+    const nameColor = msg.isOwner?"#f59e0b":msg.color;
+    const ownerTag = msg.isOwner ? tagHTML("👑 المالك","owner") : "";
+    const adminTag = msg.isAdmin&&!msg.isOwner ? tagHTML("🛡️ أدمن","admin") : "";
+    const botTag   = msg.isBot ? tagHTML("BOT","bot") : "";
+    senderHTML = `<div class="msg-sender">
+      ${avatarHTML(msg.name,msg.color,22,msg.isOwner)}
+      <span style="color:${nameColor}">${msg.name}</span>
+      ${ownerTag}${adminTag}${botTag}
+    </div>`;
+  }
+
+  let bubbleClass = "msg-bubble";
+  if(isMe) { bubbleClass += " me"; if(state.user.isOwner) bubbleClass += " owner"; }
+  else if(msg.isOwner) bubbleClass += " owner-them";
+
+  wrap.innerHTML = `
+    ${senderHTML}
+    <div class="${bubbleClass}">${msg.text}</div>
+    <span class="msg-time" style="align-self:${isMe?"flex-start":"flex-end"}">${msg.time}</span>`;
+
+  area.appendChild(wrap);
+  area.scrollTop = area.scrollHeight;
+}
+
+function renderMsgs() { $("msgs-area").innerHTML = ""; state.messages.forEach(appendMessageEl); }
+
+function sendMsg() {
+  const inp = $("chat-input");
+  const text = inp.value.trim();
+  if(!text) return;
+  const msg = {
+    id: "m_"+Date.now(), uid:state.user.id, name:state.user.name, color:state.user.color,
+    text, time:fmtTime(), isOwner:state.user.isOwner, isAdmin:state.user.isAdmin
+  };
+  addMessage(msg);
+  inp.value = "";
+  if(state.msgXPCount<20) { addXP(1); state.msgXPCount++; }
+
+  /* ─ Firebase Send (uncomment when connected) ─
+  window.FB.addDoc(window.FB.collection(window.FB_DB,"rooms",state.currentRoom.id,"messages"), {
+    ...msg, ts: window.FB.serverTimestamp()
+  });
+  */
+}
+
+$("send-btn").onclick = sendMsg;
+$("chat-input").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendMsg(); } });
+
+// ═══════════════════════════════════════
+// PROFILE
+// ═══════════════════════════════════════
+function renderProfile() {
+  const u = state.user;
+  const lvl = u.isOwner ? 100 : calcLevel(u.xp);
+  const pct = u.isOwner ? 100 : xpInLevel(u.xp);
+  const ltitle = getLevelTitle(lvl);
+  const tab = $("tab-profile");
+
+  if(u.isOwner) {
+    tab.innerHTML = `
+      <div class="profile-owner-card">
+        <div style="position:absolute;top:-30px;right:-30px;width:150px;height:150px;border-radius:50%;background:rgba(245,158,11,.05);filter:blur(30px)"></div>
+        <div class="flex items-center gap-12" style="position:relative">
+          ${avatarHTML(u.name, u.color, 80, true, "font-size:32px;")}
+          <div style="flex:1">
+            <div class="flex items-center gap-8" style="margin-bottom:4px">
+              <span style="color:#f59e0b;font-weight:900;font-size:22px;animation:ownerPulse 2s infinite">${u.name}</span>
+              <span style="font-size:18px">👑</span>
+            </div>
+            <div style="background:linear-gradient(90deg,#f59e0b,#fbbf24,#f59e0b);background-size:200% auto;animation:shimmer 2s linear infinite;-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:800;font-size:13px">${u.title}</div>
+            <div style="margin-top:8px;padding:8px 14px;border-radius:10px;background:linear-gradient(90deg,rgba(245,158,11,.18),rgba(239,68,68,.12));border:1px solid rgba(245,158,11,.5);display:inline-flex;align-items:center;gap:8px;box-shadow:0 0 16px rgba(245,158,11,.25)">
+              <span style="font-size:18px">👑</span>
+              <div>
+                <div style="background:linear-gradient(90deg,#f59e0b,#fbbf24,#ef4444);background-size:200% auto;animation:shimmer 1.8s linear infinite;-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;font-size:15px;line-height:1">المستوى 100 — الحد الأقصى</div>
+                <div style="color:rgba(245,158,11,.6);font-size:10px;margin-top:2px">أعلى مستوى في التطبيق</div>
+              </div>
+            </div>
+            <div class="flex gap-8 mt-8" style="flex-wrap:wrap">
+              <span style="background:rgba(245,158,11,.15);color:#f59e0b;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;border:1px solid rgba(245,158,11,.44)">✓ موثّق</span>
+              <span style="background:rgba(239,68,68,.12);color:#ef4444;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;border:1px solid rgba(239,68,68,.33)">🛡️ أدمن</span>
+              <span style="background:rgba(99,102,241,.12);color:#6366f1;font-size:10px;font-weight:700;padding:3px 9px;border-radius:6px;border:1px solid rgba(99,102,241,.33)">🏆 المؤسس</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="color:#f59e0b;font-size:12px;font-weight:700;margin-bottom:8px">شاراتي (${u.badges.length})</div>
+          <div class="flex gap-8" style="flex-wrap:wrap">${u.badges.map(b=>`<div class="badge-item">${b}</div>`).join("")}</div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="flex justify-between items-center" style="margin-bottom:6px">
+            <span style="background:linear-gradient(90deg,#f59e0b,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:13px;font-weight:800">👑 المستوى الأقصى — 100 / 100</span>
+            <span style="color:#f59e0b;font-size:12px;font-weight:700">10,000 XP</span>
+          </div>
+          <div style="width:100%;height:10px;border-radius:6px;background:rgba(255,255,255,0.07);overflow:hidden">
+            <div style="width:100%;height:100%;border-radius:6px;background:linear-gradient(90deg,#f59e0b,#fbbf24,#ef4444,#f59e0b);background-size:200% auto;animation:shimmer 1.5s linear infinite;box-shadow:0 0 12px rgba(245,158,11,.6)"></div>
+          </div>
+          <div style="color:rgba(245,158,11,.5);font-size:10px;margin-top:4px;text-align:center">🏆 وصلت للمستوى الأقصى في التطبيق</div>
+        </div>
+      </div>
+      <button class="btn" id="btn-edit-profile" style="margin-top:4px">✏️ تعديل الملف الشخصي</button>
+      <button class="btn danger" id="btn-logout">تسجيل الخروج</button>`;
+  } else {
+    const genderLabel = u.gender==="male"?"♂ ذكر":u.gender==="female"?"♀ أنثى":"🌐 غير محدد";
+    tab.innerHTML = `
+      <div class="profile-card">
+        ${avatarHTML(u.name, u.color, 70, false, "font-size:28px;flex-shrink:0")}
+        <div style="flex:1">
+          <div class="col-text fw-800" style="font-size:20px">${u.name}</div>
+          <div class="col-dim fs-12 mt-4">${genderLabel}</div>
+          <div class="flex items-center gap-6 mt-6">${levelBadgeHTML(lvl)}<span class="col-dim fs-11">${u.xp} XP · ${ltitle}</span></div>
+          <div style="width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,0.07);margin-top:8px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;border-radius:2px;background:linear-gradient(90deg,#6366f1,#8b5cf6);transition:width .5s"></div>
+          </div>
+          <div class="col-dim fs-10 mt-4">${pct}/100 XP للمستوى التالي</div>
+        </div>
+      </div>
+      <div class="xp-info-card" style="margin-top:4px">
+        <div class="col-text fw-700 fs-13" style="margin-bottom:10px">كيف تكسب XP؟</div>
+        ${[["🌅","تسجيل الدخول اليومي","+10 XP"],["⏱️","البقاء في التطبيق","+1 كل 5 دقائق"],["🎤","الجلوس على المايك","+2 كل دقيقة"],["💬","إرسال رسائل","+1 لكل رسالة"]].map(([ic,lb,v])=>`
+        <div class="xp-info-row"><div class="flex gap-8 items-center"><span style="font-size:16px">${ic}</span><span class="col-mid fs-13">${lb}</span></div><span class="col-accent fw-700 fs-13">${v}</span></div>`).join("")}
+      </div>
+      <button class="btn" id="btn-edit-profile" style="margin-top:4px">✏️ تعديل الملف الشخصي</button>
+      <button class="btn danger" id="btn-logout">تسجيل الخروج</button>`;
+  }
+
+  $("btn-edit-profile").onclick = openEditProfile;
+  $("btn-logout").onclick = logout;
+}
+
+function logout() {
+  clearInterval(state.xpIntervalId); clearInterval(state.micXPIntervalId);
+  state.user=null; state.currentRoom=null; state.myRooms=[];
+  $("su-name").value=$("su-email").value=$("su-pass").value="";
+  $("si-email").value=$("si-pass").value=$("si-name").value="";
+  showLoginMode("main");
+  showScreen("screen-login");
+  /* ─ Firebase logout ─
+  window.FB.signOut(window.FB_AUTH);
+  */
+}
+
+// ═══════════════════════════════════════
+// CREATE ROOM MODAL
+// ═══════════════════════════════════════
+function buildIconPicker() {
+  const picker = $("icon-picker");
+  picker.innerHTML = "";
+  ICONS.forEach(ic=>{
+    const btn = document.createElement("button");
+    btn.className = `icon-btn${ic===state.selectedIcon?" selected":""}`;
+    btn.textContent = ic;
+    btn.onclick = ()=>{
+      state.selectedIcon = ic;
+      picker.querySelectorAll(".icon-btn").forEach(b=>b.classList.toggle("selected", b.textContent===ic));
+    };
+    picker.appendChild(btn);
+  });
+}
+
+$("btn-create-room").onclick = ()=>{
+  state.selectedIcon = "🏠";
+  $("room-name-inp").value = "";
+  $("room-desc-inp").value = "";
+  buildIconPicker();
+  show("modal-create-room");
+};
+$("btn-cancel-create").onclick = ()=>hide("modal-create-room");
+$("btn-confirm-create").onclick = ()=>{
+  const name = $("room-name-inp").value.trim();
+  if(!name) return;
+  const room = {
+    id:"r_"+Date.now(), name, icon:state.selectedIcon,
+    desc:$("room-desc-inp").value.trim()||"غرفة خاصة",
+    isOfficial:false, members:1, online:1
+  };
+  state.myRooms.unshift(room);
+  hide("modal-create-room");
+  renderRooms();
+};
+
+// ═══════════════════════════════════════
+// EDIT PROFILE MODAL
+// ═══════════════════════════════════════
+function openEditProfile() {
+  $("edit-name-inp").value = state.user.name;
+  state.editGender = state.user.gender || "unset";
+  document.querySelectorAll("[data-egender]").forEach(b=>{
+    b.classList.toggle("active", b.dataset.egender===state.editGender);
+  });
+  const gRow = $("edit-gender-row");
+  toggle(gRow, !state.user.isOwner);
+  show("modal-edit-profile");
+}
+document.querySelectorAll("[data-egender]").forEach(b=>{
+  b.onclick = ()=>{
+    state.editGender = b.dataset.egender;
+    document.querySelectorAll("[data-egender]").forEach(x=>x.classList.toggle("active",x.dataset.egender===state.editGender));
+  };
+});
+$("btn-cancel-edit").onclick = ()=>hide("modal-edit-profile");
+$("btn-save-profile").onclick = ()=>{
+  const name = $("edit-name-inp").value.trim() || state.user.name;
+  state.user.name = name;
+  if(!state.user.isOwner) state.user.gender = state.editGender;
+  hide("modal-edit-profile");
+  updateHeaderXP();
+  renderProfile();
+};
+
+// ═══════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════
+$("btn-admin-panel").onclick = ()=>{ renderAdminContent("users"); showScreen("screen-admin"); };
+$("btn-close-admin").onclick = ()=>showScreen("screen-main");
+
+document.querySelectorAll("[data-atab]").forEach(btn=>{
+  btn.onclick = ()=>{ state.currentAdminTab=btn.dataset.atab; renderAdminContent(btn.dataset.atab); };
+});
+
+function renderAdminContent(tab) {
+  document.querySelectorAll("[data-atab]").forEach(b=>{
+    b.classList.toggle("active", b.dataset.atab===tab);
+  });
+  const c = $("admin-content");
+
+  if(tab==="users") {
+    if(state.members.length===0) { c.innerHTML=`<div class="col-dim fs-13 text-center" style="padding:30px">لا يوجد أعضاء مسجلون بعد</div>`; return; }
+    c.innerHTML = state.members.map(m=>`
+      <div class="admin-user-card">
+        <div style="position:relative">${avatarHTML(m.name,m.color,42,false)}${m.isAdmin?`<span style="position:absolute;bottom:-3px;right:-3px;font-size:12px">🛡️</span>`:""}</div>
+        <div style="flex:1">
+          <div class="col-text fw-700 fs-13 flex items-center gap-6">${m.name}
+            ${m.isAdmin?`<span style="background:rgba(99,102,241,.15);color:#6366f1;font-size:9px;padding:1px 5px;border-radius:5px">أدمن</span>`:""}
+            ${m.isMuted?`<span style="background:rgba(239,68,68,.15);color:#ef4444;font-size:9px;padding:1px 5px;border-radius:5px">مكتوم</span>`:""}
+          </div>
+          <div class="col-dim fs-11 mt-4">Lv.${m.level}</div>
+        </div>
+        <div class="admin-actions">
+          <button class="admin-action-btn" style="border:1px solid ${m.isMuted?"#10b981":"#ef4444"}44;background:${m.isMuted?"rgba(16,185,129,.1)":"rgba(239,68,68,.1)"};color:${m.isMuted?"#10b981":"#ef4444"}" onclick="adminToggleMute('${m.id}')">${m.isMuted?"فك":"كتم"}</button>
+          <button class="admin-action-btn" style="border:1px solid rgba(99,102,241,.44);background:rgba(99,102,241,.12);color:#6366f1" onclick="adminToggleAdmin('${m.id}')">${m.isAdmin?"نزع":"ترقية"}</button>
+          <button class="admin-action-btn" style="border:1px solid rgba(239,68,68,.44);background:rgba(239,68,68,.1);color:#ef4444" onclick="adminBan('${m.id}')">حظر</button>
+        </div>
+      </div>`).join("");
+  }
+  else if(tab==="rooms") {
+    c.innerHTML = `
+      <div style="background:#0f0f1a;border:1px solid rgba(245,158,11,.33);border-radius:16px;padding:12px 14px;margin-bottom:10px">
+        <div class="flex items-center gap-12"><span style="font-size:24px">👑</span><div><div style="color:#f59e0b;font-weight:700">الغرفة الرسمية</div><div class="col-dim fs-11">لا يمكن حذفها</div></div></div>
+      </div>
+      ${state.myRooms.length===0?`<div class="col-dim fs-13 text-center" style="padding:20px">لا توجد غرف خاصة</div>`:
+        state.myRooms.map(r=>`
+          <div style="background:#0f0f1a;border:1px solid rgba(99,102,241,.15);border-radius:16px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px">
+            <span style="font-size:26px">${r.icon||"🏠"}</span>
+            <div style="flex:1"><div class="col-text fw-700">${r.name}</div><div class="col-dim fs-11">${r.desc}</div></div>
+            <button style="padding:6px 12px;border-radius:10px;border:1px solid rgba(239,68,68,.44);background:rgba(239,68,68,.1);color:#ef4444;font-size:12px;cursor:pointer;font-weight:600" onclick="adminDeleteRoom('${r.id}')">🗑️ حذف</button>
+          </div>`).join("")}`;
+  }
+  else if(tab==="announce") {
+    c.innerHTML = `
+      <div class="col-mid fs-13" style="margin-bottom:10px">إرسال إعلان للجميع داخل التطبيق</div>
+      <textarea class="inp" id="announce-txt" placeholder="اكتب نص الإعلان هنا..." style="min-height:120px;border-color:rgba(245,158,11,.44)"></textarea>
+      <div id="announce-sent" class="hidden" style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.44);border-radius:10px;padding:10px 14px;color:#10b981;font-size:13px;font-weight:600;margin-top:10px">✓ تم إرسال الإعلان بنجاح!</div>
+      <button class="btn primary" style="margin-top:12px" onclick="sendAnnounce()">📢 إرسال الإعلان</button>`;
+  }
+  else if(tab==="stats") {
+    const online   = state.members.filter(m=>m.status!=="offline").length;
+    const inRoom   = state.members.filter(m=>m.status==="in-room").length;
+    const admins   = state.members.filter(m=>m.isAdmin).length;
+    const muted    = state.members.filter(m=>m.isMuted).length;
+    const statCards = [
+      {label:"إجمالي الأعضاء",val:state.members.length+1,icon:"👥",color:"#6366f1"},
+      {label:"متصلون الآن",val:online,icon:"🟢",color:"#10b981"},
+      {label:"غرف نشطة",val:state.myRooms.length+1,icon:"🏠",color:"#f59e0b"},
+      {label:"محظورون",val:0,icon:"🔴",color:"#ef4444"},
+    ];
+    c.innerHTML = `
+      <div class="stat-grid">${statCards.map(s=>`
+        <div class="stat-card" style="border:1px solid ${s.color}22">
+          <div style="font-size:28px;margin-bottom:6px">${s.icon}</div>
+          <div class="stat-val" style="color:${s.color}">${s.val}</div>
+          <div class="stat-label">${s.label}</div>
+        </div>`).join("")}</div>
+      <div style="background:#0f0f1a;border:1px solid rgba(99,102,241,.15);border-radius:16px;padding:16px;margin-top:12px">
+        <div class="col-text fw-700" style="margin-bottom:12px">إحصاء الأعضاء</div>
+        ${[["متصل الآن",online,"#10b981"],["في غرفة",inRoom,"#f59e0b"],["أدمنز",admins,"#6366f1"],["مكتومون",muted,"#ef4444"]].map(([l,v,c])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(99,102,241,.15)">
+            <span class="col-mid fs-13">${l}</span><span style="color:${c};font-weight:700;font-size:15px">${v}</span>
+          </div>`).join("")}
+      </div>`;
+  }
+}
+
+window.adminToggleMute  = (id)=>{ state.members=state.members.map(m=>m.id===id?{...m,isMuted:!m.isMuted}:m); renderAdminContent("users"); };
+window.adminToggleAdmin = (id)=>{ state.members=state.members.map(m=>m.id===id?{...m,isAdmin:!m.isAdmin}:m); renderAdminContent("users"); };
+window.adminBan         = (id)=>{ state.members=state.members.filter(m=>m.id!==id); renderAdminContent("users"); };
+window.adminDeleteRoom  = (id)=>{ state.myRooms=state.myRooms.filter(r=>r.id!==id); renderAdminContent("rooms"); renderRooms(); };
+window.sendAnnounce     = ()=>{
+  const txt=$("announce-txt");
+  if(!txt.value.trim()) return;
+  txt.value="";
+  show("announce-sent");
+  setTimeout(()=>hide("announce-sent"),3000);
+};
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+window.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(()=>{
+    hide("loading-screen");
+    showScreen("screen-login");
+    showLoginMode("main");
+    /* ─ Firebase Auth Listener (uncomment when connected) ─
+    window.FB.onAuthStateChanged(window.FB_AUTH, async user => {
+      if(user) {
+        if(user.email.toLowerCase()===OWNER.email.toLowerCase()) return doLogin(OWNER_PROFILE);
+        const snap = await window.FB.getDoc(window.FB.doc(window.FB_DB,"users",user.uid));
+        if(snap.exists()) doLogin(snap.data());
+      }
+    });
+    */
+  }, 1200);
+});
 </script>
 </body>
 </html>
