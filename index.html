@@ -465,8 +465,9 @@ html, body {
 
 <!-- LOADER -->
 <div id="app-loader">
-  <div class="loader-logo">IT Chat</div>
+  <div class="loader-logo">⚡ IT Chat</div>
   <div class="loader-bar"></div>
+  <div id="loader-status" style="font-size:12px;color:#64748b;margin-top:8px;font-family:'IBM Plex Sans Arabic',sans-serif">جاري الاتصال بـ Firebase...</div>
 </div>
 
 <!-- TOAST -->
@@ -710,37 +711,76 @@ const firebaseConfig = {
   projectId: "uno-i-t",
 
 // ============================================================
+// FIREBASE CONFIG VALIDATION
+// ============================================================
+const isConfigValid = !Object.values(firebaseConfig).some(v => String(v).startsWith('PUT_'));
+
+// ============================================================
 // INIT
 // ============================================================
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db   = firebase.database();
+let auth, db;
+if (isConfigValid) {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.database();
+  } catch(e) {
+    console.error('Firebase init error:', e);
+  }
+}
 
 // ============================================================
 // GLOBALS
 // ============================================================
-let currentUser   = null; // { uid, name, email, xp, level, isAdmin, isOwner, isGuest }
-let currentRoomId = 'official';
+let currentUser     = null;
+let currentRoomId   = 'official';
 let currentRoomName = '🌐 الغرفة الرسمية';
-let msgListener   = null;
+let msgListener     = null;
 let membersListener = null;
-let seatsListener = null;
-let micTimer      = null;
-let xpTimer       = null;
-let mySeatNum     = null; // 1-5 or null
-let mutedUsers    = {};
+let seatsListener   = null;
+let micTimer        = null;
+let xpTimer         = null;
+let mySeatNum       = null;
+let mutedUsers      = {};
+let loaderDone      = false;
 
 // ============================================================
 // BOOT
 // ============================================================
 window.addEventListener('load', () => {
+
+  // If config not set → show setup screen after 1s
+  if (!isConfigValid) {
+    setTimeout(() => {
+      hideLoader();
+      showConfigWarning();
+    }, 1200);
+    return;
+  }
+
   // Check local session for guest
   const g = localStorage.getItem('guest_session');
   if (g) {
     try { currentUser = JSON.parse(g); } catch(e) {}
   }
 
+  // Safety timeout: if Firebase doesn't respond in 6s, go to auth anyway
+  const safetyTimer = setTimeout(() => {
+    if (!loaderDone) {
+      hideLoader();
+      if (currentUser && currentUser.isGuest) showApp();
+      else showAuthScreen();
+    }
+  }, 6000);
+
+  // Update loader message after 3s to indicate slow connection
+  setTimeout(() => {
+    const s = document.getElementById('loader-status');
+    if (s && !loaderDone) s.textContent = 'الاتصال بطيء — يمكنك الدخول كزائر إذا فشل الاتصال';
+  }, 3000);
+
   auth.onAuthStateChanged(user => {
+    clearTimeout(safetyTimer);
     hideLoader();
     if (user) {
       loadUserFromDB(user.uid, user.email);
@@ -749,13 +789,36 @@ window.addEventListener('load', () => {
     } else {
       showAuthScreen();
     }
+  }, error => {
+    clearTimeout(safetyTimer);
+    hideLoader();
+    showAuthScreen();
   });
 });
 
 function hideLoader() {
+  if (loaderDone) return;
+  loaderDone = true;
   const l = document.getElementById('app-loader');
+  if (!l) return;
   l.style.opacity = '0';
-  setTimeout(() => l.remove(), 400);
+  setTimeout(() => { if (l.parentNode) l.remove(); }, 400);
+}
+
+function showConfigWarning() {
+  document.getElementById('auth-screen').classList.remove('hidden');
+  // Show a config notice inside auth card
+  const card = document.querySelector('.auth-card');
+  const notice = document.createElement('div');
+  notice.style.cssText = 'background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:14px;margin-bottom:18px;font-size:13px;color:#f59e0b;line-height:1.7;direction:rtl;text-align:right';
+  notice.innerHTML = `
+    <strong>⚠️ Firebase غير مُهيَّأ</strong><br>
+    افتح ملف <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px">index.html</code>
+    وضع بيانات مشروعك في:<br>
+    <code style="background:rgba(0,0,0,.3);padding:1px 5px;border-radius:4px;font-size:11px">const firebaseConfig = { ... }</code><br><br>
+    في الوقت الحالي يمكنك الدخول كـ <strong>زائر</strong> بدون Firebase.
+  `;
+  card.insertBefore(notice, card.firstChild);
 }
 
 // ============================================================
@@ -778,10 +841,10 @@ async function loginUser() {
   err.classList.add('hidden');
 
   if (!email || !pass) { showError(err, 'يرجى ملء جميع الحقول'); return; }
+  if (!auth) { showError(err, 'Firebase غير مُهيَّأ — يرجى إضافة بيانات Firebase Config أولاً'); return; }
 
   try {
     await auth.signInWithEmailAndPassword(email, pass);
-    // onAuthStateChanged will handle the rest
   } catch(e) {
     showError(err, translateFirebaseError(e.code));
   }
@@ -796,6 +859,7 @@ async function registerUser() {
 
   if (!name || !email || !pass) { showError(err, 'يرجى ملء جميع الحقول'); return; }
   if (pass.length < 6) { showError(err, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return; }
+  if (!auth) { showError(err, 'Firebase غير مُهيَّأ — يرجى إضافة بيانات Firebase Config أولاً'); return; }
 
   try {
     const cred = await auth.createUserWithEmailAndPassword(email, pass);
@@ -803,7 +867,6 @@ async function registerUser() {
     const isOwner = email === OWNER_EMAIL;
     const userData = { name, email, xp: 0, level: 1, isAdmin: isOwner, isOwner };
     await db.ref(`users/${uid}`).set(userData);
-    // onAuthStateChanged will fire
   } catch(e) {
     showError(err, translateFirebaseError(e.code));
   }
@@ -904,6 +967,7 @@ function showScreen(name) {
 // ROOMS
 // ============================================================
 function loadRoomsList() {
+  if (!db) return; // Firebase not configured
   db.ref('rooms').on('value', snap => {
     const list = document.getElementById('rooms-list');
     list.innerHTML = '';
@@ -962,9 +1026,8 @@ async function enterRoom(roomId, roomDisplayName, roomKey) {
   document.getElementById('messages-container').innerHTML = '';
 
   // Join members
-  if (!currentUser.isGuest) {
+  if (!currentUser.isGuest && db) {
     await db.ref(`rooms/${roomId}/members/${currentUser.uid}`).set({ name: currentUser.name, online: true });
-    // Disconnect hook
     db.ref(`rooms/${roomId}/members/${currentUser.uid}`).onDisconnect().remove();
   }
 
@@ -974,9 +1037,8 @@ async function enterRoom(roomId, roomDisplayName, roomKey) {
 }
 
 async function leaveCurrentRoom() {
-  if (!currentRoomId || currentUser.isGuest) return;
+  if (!currentRoomId || currentUser.isGuest || !db) return;
   await db.ref(`rooms/${currentRoomId}/members/${currentUser.uid}`).remove();
-  // Leave seat
   if (mySeatNum) {
     await db.ref(`rooms/${currentRoomId}/seats/seat${mySeatNum}`).remove();
     mySeatNum = null;
@@ -991,6 +1053,7 @@ async function leaveCurrentRoom() {
 // MESSAGES
 // ============================================================
 function listenMessages(roomId) {
+  if (!db) { showGuestChatPlaceholder(); return; }
   if (msgListener) db.ref(`rooms/${currentRoomId}/messages`).off();
   const ref = db.ref(`rooms/${roomId}/messages`).limitToLast(100);
   msgListener = ref.on('child_added', snap => {
@@ -999,11 +1062,33 @@ function listenMessages(roomId) {
   });
 }
 
+function showGuestChatPlaceholder() {
+  const container = document.getElementById('messages-container');
+  const div = document.createElement('div');
+  div.className = 'system-msg';
+  div.style.cssText = 'margin-top:40px;font-size:13px;line-height:2';
+  div.innerHTML = `
+    ⚡ أنت في وضع الزائر<br>
+    <span style="color:#6366f1">اربط Firebase Config لتفعيل الشات الفوري</span><br>
+    <span style="font-size:11px;color:var(--text3)">يمكنك تصفح الواجهة والتعرف عليها</span>
+  `;
+  container.appendChild(div);
+}
+
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!text) return;
   if (mutedUsers[currentUser.uid]) { toast('أنت مكتوم', 'error'); return; }
+
+  if (!db) {
+    // Guest/no-firebase: show locally only
+    input.value = '';
+    input.style.height = 'auto';
+    appendMessage({ uid: currentUser.uid, name: currentUser.name, text, time: Date.now(), isOwner: false, isAdmin: false });
+    return;
+  }
+
   input.value = '';
   input.style.height = 'auto';
 
@@ -1052,6 +1137,7 @@ function autoResize(el) {
 // MEMBERS
 // ============================================================
 function listenMembers(roomId) {
+  if (!db) { document.getElementById('online-count').textContent = '1'; return; }
   if (membersListener) db.ref(`rooms/${currentRoomId}/members`).off();
   const ref = db.ref(`rooms/${roomId}/members`);
   membersListener = ref.on('value', snap => {
@@ -1085,8 +1171,9 @@ function toggleMembers() {
 // SEATS (Voice)
 // ============================================================
 function listenSeats(roomId) {
-  if (seatsListener) db.ref(`rooms/${currentRoomId}/seats`).off();
   renderSeats({});
+  if (!db) return;
+  if (seatsListener) db.ref(`rooms/${currentRoomId}/seats`).off();
   const ref = db.ref(`rooms/${roomId}/seats`);
   seatsListener = ref.on('value', snap => {
     renderSeats(snap.val() || {});
@@ -1162,7 +1249,7 @@ function addXP(amount) {
     currentUser.level++;
     toast(`🎉 ترقية! وصلت إلى المستوى ${currentUser.level}`, 'success');
   }
-  db.ref(`users/${currentUser.uid}`).update({ xp: currentUser.xp, level: currentUser.level });
+  db.ref && db.ref(`users/${currentUser.uid}`).update({ xp: currentUser.xp, level: currentUser.level });
   updateSidebarUser();
 }
 
@@ -1188,7 +1275,7 @@ function loadProfile() {
 async function updateName() {
   const name = document.getElementById('edit-name').value.trim();
   if (!name) { toast('أدخل اسماً صحيحاً', 'error'); return; }
-  if (currentUser.isGuest) { currentUser.name = name; localStorage.setItem('guest_session', JSON.stringify(currentUser)); }
+  if (currentUser.isGuest || !db) { currentUser.name = name; localStorage.setItem('guest_session', JSON.stringify(currentUser)); }
   else await db.ref(`users/${currentUser.uid}`).update({ name });
   currentUser.name = name;
   updateSidebarUser();
@@ -1199,6 +1286,11 @@ async function updateName() {
 // ADMIN PANEL
 // ============================================================
 async function loadAdminPanel() {
+  if (!db) {
+    document.getElementById('users-table-body').innerHTML = '<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:20px">Firebase غير مُهيَّأ</td></tr>';
+    document.getElementById('admin-rooms-list').innerHTML = '<span style="color:var(--text3);font-size:13px">Firebase غير مُهيَّأ</span>';
+    return;
+  }
   // Users
   const usersSnap = await db.ref('users').get();
   const tbody = document.getElementById('users-table-body');
