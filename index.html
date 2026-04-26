@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IT CHAT ULTIMATE</title>
+<title>IT CHAT ULTIMATE FIXED</title>
 
 <style>
 body{margin:0;font-family:Arial;background:#070713;color:#fff}
@@ -28,13 +27,15 @@ button{width:100%;padding:10px;margin-top:5px;border:none;border-radius:8px;back
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
 </head>
 
 <body>
 
+<!-- AUTH -->
 <div id="auth" class="center">
   <div class="card">
-    <h2>IT CHAT ULTIMATE</h2>
+    <h2>IT CHAT</h2>
     <input id="email" placeholder="Email">
     <input id="pass" type="password" placeholder="Password">
     <button onclick="login()">Login</button>
@@ -42,6 +43,7 @@ button{width:100%;padding:10px;margin-top:5px;border:none;border-radius:8px;back
   </div>
 </div>
 
+<!-- HOME -->
 <div id="home" class="hidden">
 
 <div class="top">
@@ -69,11 +71,12 @@ button{width:100%;padding:10px;margin-top:5px;border:none;border-radius:8px;back
   <h4>ADMIN</h4>
   <button onclick="deleteRoom()">Delete Room</button>
   <button onclick="banLast()">Ban Last</button>
-  <button onclick="clearDM()">Clear DM</button>
+  <button onclick="clearDM()">Clear All</button>
 </div>
 
 </div>
 
+<!-- CHAT -->
 <div id="chat" class="hidden">
 
 <div class="top">
@@ -92,6 +95,7 @@ button{width:100%;padding:10px;margin-top:5px;border:none;border-radius:8px;back
 
 <script>
 
+// ================= FIREBASE =================
 const firebaseConfig = {
   apiKey: "AIzaSyCcv6TYBlwM3wdASndMtqncQvJhzztFZ9k",
   authDomain: "uno-i-t.firebaseapp.com",
@@ -108,6 +112,21 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
+// ================= DOM FIX =================
+const authDiv = document.getElementById("auth");
+const homeDiv = document.getElementById("home");
+const chatDiv = document.getElementById("chat");
+
+const nameEl = document.getElementById("name");
+const infoEl = document.getElementById("info");
+const badgesEl = document.getElementById("badges");
+const msgsEl = document.getElementById("msgs");
+const msgEl = document.getElementById("msg");
+const contentEl = document.getElementById("content");
+const roomTitleEl = document.getElementById("roomTitle");
+const adminPanel = document.getElementById("adminPanel");
+
+// ================= STATE =================
 let user=null;
 let room=null;
 let view="rooms";
@@ -116,6 +135,7 @@ let lastUser=null;
 const ADMIN_EMAIL="admin@it.com";
 const ADMIN_PASS="12345678";
 
+// ================= AUTH =================
 function register(){
  auth.createUserWithEmailAndPassword(email.value,pass.value)
  .then(u=>{
@@ -132,102 +152,114 @@ function login(){
  auth.signInWithEmailAndPassword(email.value,pass.value);
 }
 
+function logout(){
+ auth.signOut();
+}
+
+// ================= STATE LISTENER =================
 auth.onAuthStateChanged(u=>{
  if(u){
   user=u;
   showHome();
   loadUser();
   render();
- } else showAuth();
+ } else {
+  showAuth();
+ }
 });
 
+// ================= UI =================
 function showAuth(){
- auth.style.display="flex";
- home.classList.add("hidden");
- chat.classList.add("hidden");
+ authDiv.style.display="flex";
+ homeDiv.classList.add("hidden");
+ chatDiv.classList.add("hidden");
 }
 
 function showHome(){
- auth.style.display="none";
- home.classList.remove("hidden");
+ authDiv.style.display="none";
+ homeDiv.classList.remove("hidden");
 
  if(user.email===ADMIN_EMAIL){
   adminPanel.classList.remove("hidden");
  }
 }
 
+// ================= USER =================
 function loadUser(){
  db.ref("users/"+user.uid).on("value",s=>{
   let d=s.val()||{};
-  name.innerText=d.name;
-  info.innerText="XP:"+ (d.xp||0);
+  nameEl.innerText=d.name || "User";
+  infoEl.innerText="XP: "+(d.xp||0);
 
-  badges.innerHTML="";
+  badgesEl.innerHTML="";
   (d.badges||[]).forEach(b=>{
    let x=document.createElement("span");
    x.className="badge";
    x.innerText=b;
-   badges.appendChild(x);
+   badgesEl.appendChild(x);
   });
  });
 }
 
+// ================= RENDER =================
 function render(){
- let c=document.getElementById("content");
- c.innerHTML="";
+ contentEl.innerHTML="";
 
  if(view==="rooms"){
-  db.ref("rooms").on("value",s=>{
-   c.innerHTML="";
+  db.ref("rooms").once("value",s=>{
+   contentEl.innerHTML="";
    s.forEach(r=>{
     let d=document.createElement("div");
     d.className="room";
     d.innerText=r.key;
     d.onclick=()=>openRoom(r.key);
-    c.appendChild(d);
+    contentEl.appendChild(d);
    });
   });
 
-  let create=document.createElement("button");
-  create.innerText="Create Room";
-  create.onclick=()=>{
+  let btn=document.createElement("button");
+  btn.innerText="Create Room";
+  btn.onclick=()=>{
    let n=prompt("Room name");
-   db.ref("rooms/"+n).set({by:user.uid});
+   if(n) db.ref("rooms/"+n).set({by:user.uid});
   };
-  c.appendChild(create);
+  contentEl.appendChild(btn);
  }
 
  if(view==="friends"){
-  db.ref("users/"+user.uid+"/friends").on("value",s=>{
-   c.innerHTML="";
+  db.ref("users/"+user.uid+"/friends").once("value",s=>{
+   contentEl.innerHTML="";
    let data=s.val()||{};
    Object.keys(data).forEach(f=>{
     let d=document.createElement("div");
     d.className="room";
     d.innerText=f;
     d.onclick=()=>openDM(f);
-    c.appendChild(d);
+    contentEl.appendChild(d);
    });
   });
  }
 
  if(view==="profile"){
-  c.innerHTML=`
+  contentEl.innerHTML=`
    <div class="room">
-    <b>Profile</b><br>
     UID: ${user.uid}<br>
     Email: ${user.email}
    </div>`;
  }
 }
 
+// ================= CHAT =================
 function openRoom(r){
  room=r;
- home.classList.add("hidden");
- chat.classList.remove("hidden");
- roomTitle.innerText=r;
+ homeDiv.classList.add("hidden");
+ chatDiv.classList.remove("hidden");
+ roomTitleEl.innerText=r;
+
+ msgsEl.innerHTML="";
 
  db.ref("messages/"+r).off();
+
  db.ref("messages/"+r).on("child_added",s=>{
   let m=s.val();
   lastUser=m.uid;
@@ -235,7 +267,7 @@ function openRoom(r){
   let d=document.createElement("div");
   d.className="msg";
   d.innerText=m.text;
-  msgs.appendChild(d);
+  msgsEl.appendChild(d);
  });
 }
 
@@ -245,20 +277,18 @@ function openDM(fid){
 }
 
 function send(){
+ if(!msgEl.value) return;
+
  db.ref("messages/"+room).push({
-  text:msg.value,
+  text:msgEl.value,
   uid:user.uid,
   t:Date.now()
  });
 
- db.ref("users/"+user.uid).once("value",s=>{
-  let xp=(s.val().xp||0)+1;
-  db.ref("users/"+user.uid).update({xp});
- });
-
- msg.value="";
+ msgEl.value="";
 }
 
+// ================= ADMIN =================
 function deleteRoom(){
  if(user.email===ADMIN_EMAIL){
   db.ref("messages/"+room).remove();
@@ -275,12 +305,11 @@ function clearDM(){
  db.ref("messages").remove();
 }
 
+// ================= BACK =================
 function back(){
- chat.classList.add("hidden");
- home.classList.remove("hidden");
+ chatDiv.classList.add("hidden");
+ homeDiv.classList.remove("hidden");
 }
-
-function logout(){auth.signOut();}
 
 </script>
 
