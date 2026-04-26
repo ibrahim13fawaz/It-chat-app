@@ -1,96 +1,32 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>IT CHAT PRO MAX</title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IT CHAT PRO</title>
+
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
 <style>
-body{margin:0;background:#080810;color:#fff;font-family:Arial}
-.hidden{display:none}
-.center{height:100vh;display:flex;justify-content:center;align-items:center}
-.card{background:#111125;padding:20px;border-radius:12px;width:90%;max-width:380px}
-input{width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none;background:#1b1b2f;color:#fff}
-button{width:100%;padding:10px;margin-top:5px;border-radius:8px;border:none;background:#6366f1;color:#fff}
-.top{position:fixed;top:0;width:100%;display:flex;justify-content:space-between;padding:10px;background:#0b0b18;z-index:10}
-.room{background:#15152a;padding:10px;margin:5px;border-radius:8px}
-.msg{background:#1b1b2f;margin:5px;padding:8px;border-radius:8px}
-.me{background:#2a2a55}
-.admin{border:1px solid gold}
-.bottom{position:fixed;bottom:0;width:100%;display:flex;padding:10px;background:#0b0b18}
-.bottom input{flex:1}
-.badge{background:gold;color:#000;padding:3px 6px;border-radius:6px;margin:2px;font-size:11px}
-.panel{position:fixed;right:10px;top:60px;background:#15152a;padding:10px;border-radius:10px;width:220px}
-.seats{display:flex;gap:5px;margin:10px}
-.seat{flex:1;background:#1b1b2f;padding:6px;border-radius:6px;text-align:center;font-size:11px}
-.glow{color:gold}
+body{margin:0;background:#070812;color:#fff;font-family:Arial}
+button{cursor:pointer}
+input{outline:none}
+*{box-sizing:border-box}
 </style>
-
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-
 </head>
 
 <body>
+<div id="root"></div>
 
-<!-- AUTH -->
-<div id="auth" class="center">
-<div class="card">
-<h2>IT CHAT PRO</h2>
-<input id="email" placeholder="Email">
-<input id="pass" type="password" placeholder="Password">
-<button onclick="login()">Login</button>
-<button onclick="register()">Register</button>
-</div>
-</div>
+<script type="text/babel">
 
-<!-- HOME -->
-<div id="home" class="hidden">
-
-<div class="top">
-<div>
-<div id="name"></div>
-<div id="xp"></div>
-</div>
-<button onclick="logout()">Logout</button>
-</div>
-
-<div style="padding:60px 10px">
-<button onclick="createRoom()">+ Create Room</button>
-<div id="rooms"></div>
-</div>
-
-<div id="adminPanel" class="panel hidden">
-<h4>👑 ADMIN</h4>
-<button onclick="kick()">Kick Last</button>
-<button onclick="ban()">Ban User</button>
-<button onclick="clearChat()">Clear Chat</button>
-</div>
-
-</div>
-
-<!-- CHAT -->
-<div id="chat" class="hidden">
-
-<div class="top">
-<button onclick="back()">⬅</button>
-<span id="roomTitle"></span>
-</div>
-
-<div class="seats" id="seats"></div>
-<div id="msgs" style="padding:70px 10px 80px"></div>
-
-<div class="bottom">
-<input id="msg">
-<button onclick="send()">Send</button>
-</div>
-
-</div>
-
-<script>
-
-/* ================= FIREBASE ================= */
+// ───────────────── FIREBASE ─────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyCcv6TYBlwM3wdASndMtqncQvJhzztFZ9k",
   authDomain: "uno-i-t.firebaseapp.com",
@@ -103,174 +39,208 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-
 const auth=firebase.auth();
 const db=firebase.database();
 
-/* ================= STATE ================= */
-let user=null;
-let room=null;
-let lastUser=null;
-let isAdmin=false;
+// ───────────────── OWNER ─────────────────
+const OWNER_EMAIL="admin@it.com";
+const OWNER_PASS="123456";
 
-/* ================= AUTH ================= */
+// ───────────────── APP ─────────────────
+const {useState,useEffect} = React;
 
-function register(){
- auth.createUserWithEmailAndPassword(email.value,pass.value)
- .then(u=>{
-  db.ref("users/"+u.user.uid).set({
-   name:"User"+Math.floor(Math.random()*9999),
-   xp:0,
-   level:1
-  });
- });
-}
+function App(){
 
-function login(){
- auth.signInWithEmailAndPassword(email.value,pass.value);
-}
+const [user,setUser]=useState(null);
+const [room,setRoom]=useState("global");
+const [rooms,setRooms]=useState([]);
+const [msgs,setMsgs]=useState([]);
+const [msg,setMsg]=useState("");
+const [tab,setTab]=useState("rooms");
+const [friends,setFriends]=useState([]);
 
-auth.onAuthStateChanged(async u=>{
- if(!u)return;
+const isOwner=user?.email===OWNER_EMAIL;
 
- user=u;
+// ───────── FIREBASE LOAD ─────────
+useEffect(()=>{
 
- // check admin from DB
- let adminSnap=await db.ref("admins/"+user.uid).get();
- isAdmin=adminSnap.exists();
-
- db.ref("users/"+user.uid).update({
-  email:user.email
- });
-
- showHome();
- loadUser();
- loadRooms();
+db.ref("rooms").on("value",s=>{
+const d=s.val()||{};
+setRooms(Object.keys(d).map(k=>({...d[k],id:k})));
 });
 
-/* ================= UI ================= */
+db.ref("msgs/"+room).on("value",s=>{
+const d=s.val()||{};
+setMsgs(Object.values(d));
+});
 
-function showHome(){
- auth.style.display="none";
- home.classList.remove("hidden");
+},[room]);
 
- if(isAdmin){
-  adminPanel.classList.remove("hidden");
- }
+// ───────── LOGIN ─────────
+const login=async()=>{
+const email=prompt("email");
+const pass=prompt("password");
+
+if(email===OWNER_EMAIL && pass===OWNER_PASS){
+setUser({name:"OWNER",email,xp:9999,level:100});
+return;
 }
 
-function loadUser(){
- db.ref("users/"+user.uid).on("value",s=>{
-  let d=s.val()||{};
-  name.innerHTML=isAdmin?"👑 "+d.name:d.name;
-  xp.innerText="XP: "+(d.xp||0);
- });
+auth.signInWithEmailAndPassword(email,pass)
+.then(res=>{
+setUser({
+id:res.user.uid,
+email,
+name:email.split("@")[0],
+xp:0,
+level:1
+});
+});
+};
+
+// ───────── REGISTER ─────────
+const register=async()=>{
+const email=prompt("email");
+const pass=prompt("password");
+
+auth.createUserWithEmailAndPassword(email,pass)
+.then(res=>{
+db.ref("users/"+res.user.uid).set({
+name:email.split("@")[0],
+xp:0,
+level:1
+});
+});
+};
+
+// ───────── CREATE ROOM ─────────
+const createRoom=()=>{
+const name=prompt("اسم الغرفة");
+if(!name) return;
+
+const id=db.ref("rooms").push().key;
+db.ref("rooms/"+id).set({
+name,
+owner:user.email,
+members:1
+});
+};
+
+// ───────── SEND MESSAGE ─────────
+const send=()=>{
+if(!msg) return;
+
+db.ref("msgs/"+room).push({
+text:msg,
+name:user.name,
+time:Date.now()
+});
+
+setMsg("");
+};
+
+// ───────── UI LOGIN ─────────
+if(!user){
+return(
+<div style={{textAlign:"center",padding:50}}>
+<h1>IT CHAT PRO</h1>
+<button onClick={login}>دخول</button>
+<button onClick={register}>تسجيل</button>
+</div>
+);
 }
 
-/* ================= ROOMS ================= */
+// ───────── APP UI ─────────
+return(
+<div style={{display:"flex",flexDirection:"column",height:"100vh"}}>
 
-function loadRooms(){
- db.ref("rooms").on("value",s=>{
-  rooms.innerHTML="";
-  s.forEach(r=>{
-   let d=document.createElement("div");
-   d.className="room";
-   d.innerText=r.key;
-   d.onclick=()=>openRoom(r.key);
-   rooms.appendChild(d);
-  });
- });
+{/* HEADER */}
+<div style={{padding:10,background:"#111",display:"flex",justifyContent:"space-between"}}>
+<div>{user.name}</div>
+<div>Lv.{user.level}</div>
+</div>
+
+{/* TABS */}
+<div style={{display:"flex"}}>
+<button onClick={()=>setTab("rooms")}>الغرف</button>
+<button onClick={()=>setTab("friends")}>الأصدقاء</button>
+<button onClick={()=>setTab("profile")}>حسابي</button>
+</div>
+
+{/* CONTENT */}
+<div style={{flex:1,overflow:"auto",padding:10}}>
+
+{/* ROOMS */}
+{tab==="rooms" && (
+<>
+<button onClick={createRoom}>+ إنشاء غرفة</button>
+
+<div onClick={()=>setRoom("global")}
+style={{padding:10,background:"#222",margin:5}}>
+🌍 الغرفة العامة
+</div>
+
+{rooms.map(r=>(
+<div key={r.id}
+onClick={()=>setRoom(r.id)}
+style={{padding:10,background:"#1a1a2e",margin:5}}>
+🏠 {r.name}
+</div>
+))}
+</>
+)}
+
+{/* FRIENDS */}
+{tab==="friends" && (
+friends.length===0
+? <div>لا يوجد أصدقاء</div>
+: friends.map(f=>(
+<div key={f.id}>{f.name}</div>
+))
+)}
+
+{/* PROFILE */}
+{tab==="profile" && (
+<div>
+<div>اسم: {user.name}</div>
+<div>XP: {user.xp}</div>
+<div>Level: {user.level}</div>
+
+{isOwner && <div style={{color:"gold"}}>👑 OWNER</div>}
+</div>
+)}
+
+{/* CHAT */}
+{tab==="rooms" && (
+<>
+<div style={{marginTop:10}}>
+{msgs.map((m,i)=>(
+<div key={i} style={{background:"#111",margin:5,padding:8}}>
+<b>{m.name}:</b> {m.text}
+</div>
+))}
+</div>
+</>
+)}
+
+</div>
+
+{/* INPUT */}
+<div style={{display:"flex",padding:10,background:"#111"}}>
+<input
+value={msg}
+onChange={e=>setMsg(e.target.value)}
+style={{flex:1,padding:10}}
+/>
+<button onClick={send}>إرسال</button>
+</div>
+
+</div>
+);
 }
 
-function createRoom(){
- let n=prompt("Room name");
- db.ref("rooms/"+n).set({created:Date.now()});
-}
-
-/* ================= CHAT ================= */
-
-function openRoom(r){
- room=r;
- home.classList.add("hidden");
- chat.classList.remove("hidden");
- roomTitle.innerText=r;
-
- seats.innerHTML="";
- for(let i=1;i<=5;i++){
-  let s=document.createElement("div");
-  s.className="seat";
-  s.innerText="Seat "+i;
-  seats.appendChild(s);
- }
-
- db.ref("rooms/"+room+"/messages").off();
- db.ref("rooms/"+room+"/messages").on("child_added",s=>{
-  let m=s.val();
-  lastUser=m.uid;
-
-  let d=document.createElement("div");
-  d.className="msg "+(m.uid===user.uid?"me":"")+(m.isAdmin?" admin":"");
-  d.innerText=(m.isAdmin?"👑 ":"")+m.text;
-
-  msgs.appendChild(d);
-  msgs.scrollTop=msgs.scrollHeight;
- });
-}
-
-function send(){
- db.ref("rooms/"+room+"/messages").push({
-  uid:user.uid,
-  text:msg.value,
-  isAdmin:isAdmin
- });
-
- addXP(1);
- msg.value="";
-}
-
-/* ================= XP ================= */
-
-function addXP(x){
- db.ref("users/"+user.uid).once("value",s=>{
-  let d=s.val()||{};
-  db.ref("users/"+user.uid).update({
-   xp:(d.xp||0)+x
-  });
- });
-}
-
-/* ================= ADMIN ================= */
-
-function kick(){
- if(isAdmin && lastUser){
-  db.ref("users/"+lastUser).update({kicked:true});
- }
-}
-
-function ban(){
- if(isAdmin && lastUser){
-  db.ref("users/"+lastUser).remove();
- }
-}
-
-function clearChat(){
- if(isAdmin){
-  db.ref("rooms/"+room+"/messages").remove();
- }
-}
-
-/* ================= NAV ================= */
-
-function back(){
- chat.classList.add("hidden");
- home.classList.remove("hidden");
-}
-
-function logout(){
- auth.signOut();
-}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 
 </script>
-
 </body>
 </html>
